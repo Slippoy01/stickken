@@ -88,19 +88,52 @@
         <div id="announcement-banner">ROUND 1</div>
     </div>
 
-    <!-- Touch / Mobile Controls (Visible on mobile or when toggled) -->
+    <!-- Touch / Mobile Controls (Arcade Dual-Thumb Layout) -->
     <div id="touch-controls" style="display: none;">
-        <div class="touch-cluster">
-            <button id="touch-left" class="touch-btn">◀</button>
-            <button id="touch-right" class="touch-btn">▶</button>
-            <button id="touch-jump" class="touch-btn">▲</button>
-            <button id="touch-dash" class="touch-btn">DASH</button>
+        <!-- Left Thumb: Movement & Dash -->
+        <div class="touch-cluster touch-movement-cluster">
+            <div class="touch-dpad-grid">
+                <button id="touch-jump" class="touch-btn btn-dir-up" title="Jump (Lompat)">
+                    <span class="touch-icon">▲</span>
+                    <span class="touch-lbl">LOMPAT</span>
+                </button>
+                <div class="touch-h-row">
+                    <button id="touch-left" class="touch-btn btn-dir-left" title="Move Left (Kiri)">
+                        <span class="touch-icon">◀</span>
+                        <span class="touch-lbl">KIRI</span>
+                    </button>
+                    <button id="touch-dash-l" class="touch-btn btn-dir-dash" title="Shadow Dash (Menghindar)">
+                        <span class="touch-icon">💨</span>
+                        <span class="touch-lbl">DASH</span>
+                    </button>
+                    <button id="touch-right" class="touch-btn btn-dir-right" title="Move Right (Kanan)">
+                        <span class="touch-icon">▶</span>
+                        <span class="touch-lbl">KANAN</span>
+                    </button>
+                </div>
+            </div>
         </div>
-        <div class="touch-cluster">
-            <button id="touch-block" class="touch-btn">GUARD</button>
-            <button id="touch-punch" class="touch-btn">PUNCH</button>
-            <button id="touch-kick" class="touch-btn">KICK</button>
-            <button id="touch-special" class="touch-btn btn-special">KI BLAST</button>
+
+        <!-- Right Thumb: Combat Action Attacks -->
+        <div class="touch-cluster touch-action-cluster">
+            <div class="touch-actions-grid">
+                <button id="touch-block" class="touch-btn btn-guard" title="Guard / Tangkis">
+                    <span class="touch-icon">🛡️</span>
+                    <span class="touch-lbl">GUARD</span>
+                </button>
+                <button id="touch-special" class="touch-btn btn-special" title="Special Ki Blast">
+                    <span class="touch-icon">⚡</span>
+                    <span class="touch-lbl">KI BLAST</span>
+                </button>
+                <button id="touch-punch" class="touch-btn btn-punch" title="Punch Combo (Pukulan)">
+                    <span class="touch-icon">🥊</span>
+                    <span class="touch-lbl">TINJU</span>
+                </button>
+                <button id="touch-kick" class="touch-btn btn-kick" title="Kick Combo (Tendangan)">
+                    <span class="touch-icon">🥋</span>
+                    <span class="touch-lbl">TENDANG</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -140,11 +173,12 @@
 
             <button id="btn-start-fight" class="btn-primary">START BATTLE</button>
 
-            <!-- Controls Guide Section (Keyboard & Gamepad Tabs) -->
+            <!-- Controls Guide Section (Keyboard, Gamepad & Touch Tabs) -->
             <div class="controls-guide-wrapper">
                 <div class="controls-tabs">
                     <button type="button" class="ctrl-tab-btn active" id="tab-keyboard">⌨️ Keyboard</button>
                     <button type="button" class="ctrl-tab-btn" id="tab-gamepad">🎮 Gamepad</button>
+                    <button type="button" class="ctrl-tab-btn" id="tab-touch">📱 Layar Sentuh / HP</button>
                     <div id="gamepad-badge-status" class="gamepad-status-pill disconnected" title="Status Gamepad">
                         <span class="status-dot"></span>
                         <span id="gamepad-status-text">No Gamepad</span>
@@ -210,6 +244,47 @@
                         - Dilengkapi efek getar haptic saat serangan berat dan ledakan Ki!
                     </div>
                 </div>
+
+                <!-- Touch Mobile Guide Pane -->
+                <div id="guide-pane-touch" class="guide-pane">
+                    <div class="guide-title">📱 Panduan Kontrol Layar Sentuh / HP</div>
+                    <div class="gamepad-grid">
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge dpad">◀ KIRI</span> <span class="guide-or">/</span> <span class="gamepad-badge dpad">▶ KANAN</span>
+                            <span class="guide-action">Berjalan mendekat atau menjaga jarak</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-a">▲ LOMPAT</span>
+                            <span class="guide-action">Melompat ke udara (dapat dikombinasikan dengan tendangan udara!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-bumper">💨 DASH</span>
+                            <span class="guide-action">Menghindar kilat (*Shadow Dash*)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-x">🥊 TINJU</span>
+                            <span class="guide-action"><strong>3-Hit Punch</strong> (Jab &rarr; Straight Cross &rarr; Electric Uppercut!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-y">🥋 TENDANG</span>
+                            <span class="guide-action"><strong>3-Hit Kick</strong> (High Kick &rarr; Heavy Kick &rarr; 360° Tornado Kick!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-guard">🛡️ GUARD</span>
+                            <span class="guide-action">Tahan untuk <strong>menangkis 80% serangan musuh</strong></span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-special">⚡ KI BLAST</span>
+                            <span class="guide-action">Tembakan proyektil energi dahsyat (*Ki &ge; 40%*)</span>
+                        </div>
+                    </div>
+                    <div class="p2-note gamepad-tip">
+                        💡 <strong>Tips Main di HP:</strong><br>
+                        - Tombol sentuh otomatis muncul saat membuka game di layar HP atau tablet.<br>
+                        - Anda juga bisa memunculkan atau menyembunyikan tombol sentuh kapan saja dengan menekan ikon <strong>📱</strong> di bar atas.<br>
+                        - Dilengkapi feedback getar saat tombol disentuh untuk feel arcade yang mantap!
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -273,25 +348,24 @@
             const selectDiff = document.getElementById('select-difficulty');
             const selectArena = document.getElementById('select-arena');
 
-            // Controls Tabs Switcher
+            // Controls Tabs Switcher (Keyboard, Gamepad, Touch)
             const tabKeyboard = document.getElementById('tab-keyboard');
             const tabGamepad = document.getElementById('tab-gamepad');
+            const tabTouch = document.getElementById('tab-touch');
             const paneKeyboard = document.getElementById('guide-pane-keyboard');
             const paneGamepad = document.getElementById('guide-pane-gamepad');
+            const paneTouch = document.getElementById('guide-pane-touch');
 
-            tabKeyboard.addEventListener('click', () => {
-                tabKeyboard.classList.add('active');
-                tabGamepad.classList.remove('active');
-                paneKeyboard.classList.add('active');
-                paneGamepad.classList.remove('active');
-            });
+            const switchTab = (activeTab, activePane) => {
+                [tabKeyboard, tabGamepad, tabTouch].forEach(t => t.classList.remove('active'));
+                [paneKeyboard, paneGamepad, paneTouch].forEach(p => p.classList.remove('active'));
+                activeTab.classList.add('active');
+                activePane.classList.add('active');
+            };
 
-            tabGamepad.addEventListener('click', () => {
-                tabGamepad.classList.add('active');
-                tabKeyboard.classList.remove('active');
-                paneGamepad.classList.add('active');
-                paneKeyboard.classList.remove('active');
-            });
+            tabKeyboard.addEventListener('click', () => switchTab(tabKeyboard, paneKeyboard));
+            tabGamepad.addEventListener('click', () => switchTab(tabGamepad, paneGamepad));
+            tabTouch.addEventListener('click', () => switchTab(tabTouch, paneTouch));
 
             // Pause Modal controls
             const btnPauseControls = document.getElementById('btn-pause-controls');
@@ -362,12 +436,22 @@
             // Touch toggle
             const touchBtn = document.getElementById('btn-touch-toggle');
             const touchControls = document.getElementById('touch-controls');
+            
             // Auto detect touch devices
-            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            const isTouchUser = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth <= 1024);
+            if (isTouchUser) {
                 touchControls.style.display = 'flex';
+                touchControls.dataset.userEnabled = 'true';
+                touchBtn.style.borderColor = '#00f0ff';
+                touchBtn.style.background = 'rgba(0, 240, 255, 0.25)';
             }
+
             touchBtn.addEventListener('click', () => {
-                touchControls.style.display = (touchControls.style.display === 'none') ? 'flex' : 'none';
+                const isHidden = (touchControls.style.display === 'none' || !touchControls.style.display);
+                touchControls.style.display = isHidden ? 'flex' : 'none';
+                touchControls.dataset.userEnabled = isHidden ? 'true' : 'false';
+                touchBtn.style.borderColor = isHidden ? '#00f0ff' : 'rgba(0, 240, 255, 0.35)';
+                touchBtn.style.background = isHidden ? 'rgba(0, 240, 255, 0.25)' : 'rgba(16, 22, 38, 0.78)';
             });
 
             // Fullscreen toggle

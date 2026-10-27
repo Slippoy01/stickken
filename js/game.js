@@ -328,25 +328,75 @@ class StickmanGame {
     }
 
     initTouchControls() {
-        const bindTouchBtn = (id, onDown, onUp) => {
+        const bindPointerBtn = (id, onDown, onUp, isTapAction = false) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            const start = (e) => { e.preventDefault(); window.soundEngine.init(); onDown(); };
-            const end = (e) => { e.preventDefault(); if (onUp) onUp(); };
-            btn.addEventListener('touchstart', start, { passive: false });
-            btn.addEventListener('touchend', end, { passive: false });
-            btn.addEventListener('mousedown', start);
-            btn.addEventListener('mouseup', end);
+
+            let isPressed = false;
+            let autoReleaseTimer = null;
+
+            const handleDown = (e) => {
+                if (e) {
+                    e.preventDefault();
+                    if (e.target && e.target.setPointerCapture && e.pointerId !== undefined) {
+                        try { e.target.setPointerCapture(e.pointerId); } catch (_) {}
+                    }
+                }
+                if (isPressed) return;
+                isPressed = true;
+                btn.classList.add('touch-active');
+                window.soundEngine.init();
+
+                // Physical vibration feedback on mobile phone
+                if (navigator.vibrate) {
+                    try { navigator.vibrate(22); } catch (_) {}
+                }
+
+                onDown();
+
+                // Auto reset discrete tap actions after short trigger
+                if (isTapAction) {
+                    clearTimeout(autoReleaseTimer);
+                    autoReleaseTimer = setTimeout(() => {
+                        if (onUp) onUp();
+                    }, 120);
+                }
+            };
+
+            const handleUp = (e) => {
+                if (e) e.preventDefault();
+                if (!isPressed) return;
+                isPressed = false;
+                btn.classList.remove('touch-active');
+                clearTimeout(autoReleaseTimer);
+                if (onUp) onUp();
+            };
+
+            btn.addEventListener('pointerdown', handleDown);
+            btn.addEventListener('pointerup', handleUp);
+            btn.addEventListener('pointercancel', handleUp);
+            btn.addEventListener('pointerleave', (e) => {
+                if (!btn.hasPointerCapture || !btn.hasPointerCapture(e.pointerId)) {
+                    handleUp(e);
+                }
+            });
+
+            // Prevent context menu on long tap
+            btn.addEventListener('contextmenu', (e) => e.preventDefault());
         };
 
-        bindTouchBtn('touch-left', () => this.keys['KeyA'] = true, () => this.keys['KeyA'] = false);
-        bindTouchBtn('touch-right', () => this.keys['KeyD'] = true, () => this.keys['KeyD'] = false);
-        bindTouchBtn('touch-jump', () => { this.keys['KeyW'] = true; setTimeout(() => this.keys['KeyW'] = false, 150); });
-        bindTouchBtn('touch-punch', () => { this.keys['KeyJ'] = true; setTimeout(() => this.keys['KeyJ'] = false, 120); });
-        bindTouchBtn('touch-kick', () => { this.keys['KeyK'] = true; setTimeout(() => this.keys['KeyK'] = false, 120); });
-        bindTouchBtn('touch-dash', () => { this.keys['KeyL'] = true; setTimeout(() => this.keys['KeyL'] = false, 120); });
-        bindTouchBtn('touch-block', () => this.keys['KeyI'] = true, () => this.keys['KeyI'] = false);
-        bindTouchBtn('touch-special', () => { this.keys['KeyU'] = true; setTimeout(() => this.keys['KeyU'] = false, 120); });
+        // Left Thumb: Movement & Dash
+        bindPointerBtn('touch-left', () => this.keys['KeyA'] = true, () => this.keys['KeyA'] = false);
+        bindPointerBtn('touch-right', () => this.keys['KeyD'] = true, () => this.keys['KeyD'] = false);
+        bindPointerBtn('touch-jump', () => this.keys['KeyW'] = true, () => this.keys['KeyW'] = false, true);
+        bindPointerBtn('touch-dash-l', () => this.keys['KeyL'] = true, () => this.keys['KeyL'] = false, true);
+        bindPointerBtn('touch-dash', () => this.keys['KeyL'] = true, () => this.keys['KeyL'] = false, true);
+
+        // Right Thumb: Combat Action Attacks
+        bindPointerBtn('touch-punch', () => this.keys['KeyJ'] = true, () => this.keys['KeyJ'] = false, true);
+        bindPointerBtn('touch-kick', () => this.keys['KeyK'] = true, () => this.keys['KeyK'] = false, true);
+        bindPointerBtn('touch-block', () => this.keys['KeyI'] = true, () => this.keys['KeyI'] = false);
+        bindPointerBtn('touch-special', () => this.keys['KeyU'] = true, () => this.keys['KeyU'] = false, true);
     }
 
     initHUD() {
@@ -399,6 +449,15 @@ class StickmanGame {
         document.getElementById('pause-modal').style.display = 'none';
         document.getElementById('victory-modal').style.display = 'none';
         document.getElementById('hud').style.display = 'block';
+
+        // Auto display touch controls on mobile or if enabled by user
+        const touchControls = document.getElementById('touch-controls');
+        if (touchControls) {
+            const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth <= 1024) || (touchControls.dataset.userEnabled === 'true');
+            if (isTouch) {
+                touchControls.style.display = 'flex';
+            }
+        }
 
         this.p2NameLabel.textContent = (mode === 'VERSUS_2P') ? "PLAYER 2" : "SHADOW";
 
