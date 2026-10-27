@@ -4,11 +4,13 @@ deployment:
     - export DEPLOYPATH=/home/btsbmuww/public_html/stickken/
     - /bin/mkdir -p $DEPLOYPATH
     - /bin/cp -f index.html $DEPLOYPATH
+    - /bin/cp -f index.php $DEPLOYPATH
     - /bin/cp -f .htaccess $DEPLOYPATH
     - /bin/cp -rf css $DEPLOYPATH
     - /bin/cp -rf js $DEPLOYPATH
     - /bin/chmod -R 755 $DEPLOYPATH
     - /bin/chmod 644 $DEPLOYPATH/index.html
+    - /bin/chmod 644 $DEPLOYPATH/index.php
     - /bin/chmod 644 $DEPLOYPATH/.htaccess
     - /bin/chmod -R 755 $DEPLOYPATH/css
     - /bin/chmod -R 755 $DEPLOYPATH/js
