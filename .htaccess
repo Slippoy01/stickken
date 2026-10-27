@@ -1,0 +1,15 @@
+# Set default index file
+DirectoryIndex index.html
+
+# Prevent parent WordPress/CMS rewrite rules from intercepting this subfolder
+<IfModule mod_rewrite.c>
+    RewriteEngine Off
+</IfModule>
+
+# Ensure public read access
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+
+# Disable directory listing
+Options -Indexes
