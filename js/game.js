@@ -39,6 +39,17 @@ class StickmanGame {
         // Input States
         this.keys = {};
 
+        // Gamepad Subsystem State
+        this.prevPadButtons = [{}, {}];
+        this.prevPadAxes = [{}, {}];
+        this.pad1Input = null;
+        this.pad2Input = null;
+        this.gamepadStatusEl = document.getElementById('gamepad-status-text');
+        this.gamepadBadgeEl = document.getElementById('gamepad-badge-status');
+        this.gamepadToastEl = document.getElementById('gamepad-toast');
+        this.gamepadToastMsgEl = document.getElementById('gamepad-toast-msg');
+        this.gamepadToastTimer = null;
+
         // Three.js Core
         this.initThree();
 
@@ -119,7 +130,201 @@ class StickmanGame {
             this.keys[e.code] = false;
         });
 
+        // Gamepad Connect / Disconnect Handlers
+        window.addEventListener('gamepadconnected', (e) => {
+            this.onGamepadConnected(e.gamepad);
+        });
+
+        window.addEventListener('gamepaddisconnected', (e) => {
+            this.onGamepadDisconnected(e.gamepad);
+        });
+
         this.initTouchControls();
+        this.updateGamepadBadge();
+    }
+
+    showGamepadToast(message, isDisconnect = false) {
+        if (!this.gamepadToastEl || !this.gamepadToastMsgEl) return;
+        this.gamepadToastMsgEl.textContent = message;
+        if (isDisconnect) {
+            this.gamepadToastEl.classList.add('toast-disconnect');
+        } else {
+            this.gamepadToastEl.classList.remove('toast-disconnect');
+        }
+        this.gamepadToastEl.classList.add('show');
+        clearTimeout(this.gamepadToastTimer);
+        this.gamepadToastTimer = setTimeout(() => {
+            if (this.gamepadToastEl) this.gamepadToastEl.classList.remove('show');
+        }, 3000);
+    }
+
+    onGamepadConnected(gp) {
+        window.soundEngine.init();
+        const pLabel = (gp.index === 0) ? "Player 1" : (gp.index === 1 ? "Player 2" : `#${gp.index + 1}`);
+        const shortName = gp.id.split('(')[0].trim() || 'Gamepad';
+        this.showGamepadToast(`🎮 ${shortName} terhubung (${pLabel})`);
+        this.updateGamepadBadge();
+        this.triggerGamepadRumble(gp.index, 100, 0.3, 0.5);
+    }
+
+    onGamepadDisconnected(gp) {
+        this.showGamepadToast(`⚠️ Gamepad #${gp.index + 1} terputus`, true);
+        this.updateGamepadBadge();
+    }
+
+    updateGamepadBadge() {
+        const rawPads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const activePads = Array.from(rawPads).filter(p => p !== null && p.connected);
+        if (!this.gamepadBadgeEl || !this.gamepadStatusEl) return;
+
+        if (activePads.length > 0) {
+            this.gamepadBadgeEl.className = 'gamepad-status-pill connected';
+            if (activePads.length === 1) {
+                const padName = activePads[0].id.split('(')[0].trim() || 'Controller';
+                this.gamepadStatusEl.textContent = `🎮 P1: ${padName.slice(0, 16)}`;
+            } else {
+                this.gamepadStatusEl.textContent = `🎮 2 Gamepad Aktif (P1 & P2)`;
+            }
+        } else {
+            this.gamepadBadgeEl.className = 'gamepad-status-pill disconnected';
+            this.gamepadStatusEl.textContent = 'Gamepad Disconnected';
+        }
+    }
+
+    triggerGamepadRumble(playerIndex = 0, durationMs = 120, weak = 0.4, strong = 0.7) {
+        try {
+            const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            const pad = pads[playerIndex];
+            if (pad && pad.vibrationActuator && pad.vibrationActuator.playEffect) {
+                pad.vibrationActuator.playEffect('dual-rumble', {
+                    startDelay: 0,
+                    duration: durationMs,
+                    weakMagnitude: weak,
+                    strongMagnitude: strong
+                }).catch(() => {});
+            }
+        } catch (e) {}
+    }
+
+    pollGamepadState() {
+        const rawPads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const pad1 = rawPads[0];
+        const pad2 = rawPads[1];
+
+        this.pad1Input = this.readPadInput(pad1, 0);
+        this.pad2Input = this.readPadInput(pad2, 1);
+
+        // Global Gamepad Menu Navigation / Pause
+        this.handleMenuGamepadInput(this.pad1Input || this.pad2Input);
+    }
+
+    readPadInput(pad, padIndex) {
+        if (!pad || !pad.connected) {
+            this.prevPadButtons[padIndex] = {};
+            this.prevPadAxes[padIndex] = {};
+            return null;
+        }
+
+        const prevBtns = this.prevPadButtons[padIndex] || {};
+        const prevAxes = this.prevPadAxes[padIndex] || {};
+
+        const isDown = (idx) => Boolean(pad.buttons && pad.buttons[idx] && (pad.buttons[idx].pressed || pad.buttons[idx].value > 0.45));
+        const justPressed = (idx) => Boolean(isDown(idx) && !prevBtns[idx]);
+
+        // Left Analog Stick Axes (-1 to +1)
+        const axisX = (pad.axes && pad.axes[0] !== undefined) ? pad.axes[0] : 0;
+        const axisY = (pad.axes && pad.axes[1] !== undefined) ? pad.axes[1] : 0;
+
+        const stickLeft = axisX < -0.32;
+        const stickRight = axisX > 0.32;
+        const stickUp = axisY < -0.58;
+        const stickDown = axisY > 0.48;
+
+        const justStickUp = stickUp && !prevAxes.stickUp;
+        const justStickLeft = stickLeft && !prevAxes.stickLeft;
+        const justStickRight = stickRight && !prevAxes.stickRight;
+
+        // Standard Button Mapping (W3C Standard Gamepad / Xbox / PlayStation)
+        // 0: A (Cross) - Jump
+        // 1: B (Circle) - Special Ki Blast
+        // 2: X (Square) - Punch Combo
+        // 3: Y (Triangle) - Kick Combo
+        // 4: LB (L1) - Guard / Block
+        // 5: RB (R1) - Dash
+        // 6: LT (L2) - Guard / Special
+        // 7: RT (R2) - Dash
+        // 8: Back / Select
+        // 9: Start / Options / Menu
+        // 12: D-Pad Up (Jump)
+        // 13: D-Pad Down (Block)
+        // 14: D-Pad Left
+        // 15: D-Pad Right
+        const left = isDown(14) || stickLeft;
+        const right = isDown(15) || stickRight;
+        const jump = justPressed(0) || justPressed(12) || justStickUp;
+        const punch = justPressed(2);
+        const kick = justPressed(3);
+        const dash = justPressed(5) || justPressed(7);
+        const block = isDown(4) || isDown(13) || stickDown || (pad.buttons[6] && pad.buttons[6].value > 0.35);
+        const special = justPressed(1) || (pad.buttons[6] && pad.buttons[6].value > 0.65 && !prevBtns.ltSpecial);
+        const start = justPressed(9);
+        const confirm = justPressed(0) || justPressed(9);
+
+        // Record current button states for next frame edge detection
+        const currentBtns = {};
+        if (pad.buttons) {
+            for (let i = 0; i < pad.buttons.length; i++) {
+                currentBtns[i] = isDown(i);
+            }
+            currentBtns.ltSpecial = Boolean(pad.buttons[6] && pad.buttons[6].value > 0.65);
+        }
+        this.prevPadButtons[padIndex] = currentBtns;
+
+        this.prevPadAxes[padIndex] = {
+            stickUp,
+            stickDown,
+            stickLeft,
+            stickRight
+        };
+
+        return {
+            left,
+            right,
+            jump,
+            punch,
+            kick,
+            dash,
+            block,
+            special,
+            start,
+            confirm,
+            justLeft: justPressed(14) || justStickLeft,
+            justRight: justPressed(15) || justStickRight
+        };
+    }
+
+    handleMenuGamepadInput(input) {
+        if (!input) return;
+
+        if (this.matchState === 'MENU') {
+            if (input.confirm) {
+                const btn = document.getElementById('btn-start-fight');
+                if (btn) btn.click();
+            }
+        } else if (this.matchState === 'PAUSED') {
+            if (input.start || input.confirm) {
+                this.togglePause();
+            }
+        } else if (this.matchState === 'MATCH_OVER') {
+            if (input.confirm) {
+                const btn = document.getElementById('btn-rematch');
+                if (btn) btn.click();
+            }
+        } else if (this.matchState === 'FIGHTING') {
+            if (input.start) {
+                this.togglePause();
+            }
+        }
     }
 
     initTouchControls() {
@@ -246,6 +451,9 @@ class StickmanGame {
     animate() {
         requestAnimationFrame(this.animate);
 
+        // Poll Gamepad inputs every frame (continuous axes + edge-triggered buttons)
+        this.pollGamepadState();
+
         let delta = this.clock.getDelta();
         if (delta > 0.08) delta = 0.08;
 
@@ -357,21 +565,23 @@ class StickmanGame {
         this.camera.lookAt(midX * 0.9, targetY - 0.55, 0);
     }
 
-    // Player 1 Input Handler
+    // Player 1 Input Handler (Keyboard + Touch + Gamepad 1)
     handlePlayer1Input(p, opponent, delta) {
         const st = p.animState;
         if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
 
+        const pad = this.pad1Input;
         const is1PMode = (this.gameMode !== 'VERSUS_2P');
-        const leftKey = this.keys['KeyA'] || (is1PMode && this.keys['ArrowLeft']);
-        const rightKey = this.keys['KeyD'] || (is1PMode && this.keys['ArrowRight']);
-        const jumpKey = this.keys['KeyW'] || this.keys['Space'] || (is1PMode && this.keys['ArrowUp']);
-        const blockKey = this.keys['KeyI'] || this.keys['KeyE'] || this.keys['KeyS'];
 
-        const punchKey = this.keys['KeyJ'];
-        const kickKey = this.keys['KeyK'];
-        const dashKey = this.keys['KeyL'] || this.keys['ShiftLeft'];
-        const specialKey = this.keys['KeyU'] || this.keys['KeyQ'];
+        const leftKey = this.keys['KeyA'] || (is1PMode && this.keys['ArrowLeft']) || (pad && pad.left);
+        const rightKey = this.keys['KeyD'] || (is1PMode && this.keys['ArrowRight']) || (pad && pad.right);
+        const jumpKey = this.keys['KeyW'] || this.keys['Space'] || (is1PMode && this.keys['ArrowUp']) || (pad && pad.jump);
+        const blockKey = this.keys['KeyI'] || this.keys['KeyE'] || this.keys['KeyS'] || (pad && pad.block);
+
+        const punchKey = this.keys['KeyJ'] || (pad && pad.punch);
+        const kickKey = this.keys['KeyK'] || (pad && pad.kick);
+        const dashKey = this.keys['KeyL'] || this.keys['ShiftLeft'] || (pad && pad.dash);
+        const specialKey = this.keys['KeyU'] || this.keys['KeyQ'] || (pad && pad.special);
 
         const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
 
@@ -389,6 +599,7 @@ class StickmanGame {
         if (specialKey) {
             this.keys['KeyU'] = false;
             this.keys['KeyQ'] = false;
+            if (pad) pad.special = false;
             p.setFacing(dirToOpponent);
             p.triggerAttack('SPECIAL');
             return;
@@ -398,6 +609,7 @@ class StickmanGame {
         if (dashKey) {
             this.keys['KeyL'] = false;
             this.keys['ShiftLeft'] = false;
+            if (pad) pad.dash = false;
             const dashDir = leftKey ? -1 : (rightKey ? 1 : dirToOpponent);
             p.setFacing(dirToOpponent);
             p.triggerDash(dashDir);
@@ -407,6 +619,7 @@ class StickmanGame {
         // 3-Hit Punch Combo (1: Left Jab -> 2: Right Cross -> 3: Electric Uppercut)
         if (punchKey) {
             this.keys['KeyJ'] = false;
+            if (pad) pad.punch = false;
             p.setFacing(dirToOpponent);
             p.requestPunchCombo();
             return;
@@ -415,6 +628,7 @@ class StickmanGame {
         // 3-Hit Kick Combo (1: Left High Kick -> 2: Right Heavy Kick -> 3: 360 Tornado Kick, or Air Divekick)
         if (kickKey) {
             this.keys['KeyK'] = false;
+            if (pad) pad.kick = false;
             p.setFacing(dirToOpponent);
             p.requestKickCombo();
             return;
@@ -422,6 +636,7 @@ class StickmanGame {
 
         // Jump
         if (jumpKey && p.isGrounded && st !== 'ATTACK') {
+            if (pad) pad.jump = false;
             p.setFacing(dirToOpponent);
             p.triggerJump();
             return;
@@ -445,20 +660,22 @@ class StickmanGame {
         }
     }
 
-    // Player 2 Input Handler (Local 2-Player Versus Mode)
+    // Player 2 Input Handler (Local 2-Player Versus Mode: Keyboard / Gamepad 2)
     handlePlayer2Input(p, opponent, delta) {
         const st = p.animState;
         if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
 
-        const leftKey = this.keys['ArrowLeft'] || this.keys['Numpad4'];
-        const rightKey = this.keys['ArrowRight'] || this.keys['Numpad6'];
-        const jumpKey = this.keys['ArrowUp'] || this.keys['Numpad8'];
-        const blockKey = this.keys['Numpad5'] || this.keys['KeyH'] || this.keys['ArrowDown'];
+        const pad = this.pad2Input;
 
-        const punchKey = this.keys['Numpad1'] || this.keys['KeyB'];
-        const kickKey = this.keys['Numpad2'] || this.keys['KeyN'];
-        const dashKey = this.keys['Numpad3'] || this.keys['KeyM'];
-        const specialKey = this.keys['Numpad0'] || this.keys['KeyG'];
+        const leftKey = this.keys['ArrowLeft'] || this.keys['Numpad4'] || (pad && pad.left);
+        const rightKey = this.keys['ArrowRight'] || this.keys['Numpad6'] || (pad && pad.right);
+        const jumpKey = this.keys['ArrowUp'] || this.keys['Numpad8'] || (pad && pad.jump);
+        const blockKey = this.keys['Numpad5'] || this.keys['KeyH'] || this.keys['ArrowDown'] || (pad && pad.block);
+
+        const punchKey = this.keys['Numpad1'] || this.keys['KeyB'] || (pad && pad.punch);
+        const kickKey = this.keys['Numpad2'] || this.keys['KeyN'] || (pad && pad.kick);
+        const dashKey = this.keys['Numpad3'] || this.keys['KeyM'] || (pad && pad.dash);
+        const specialKey = this.keys['Numpad0'] || this.keys['KeyG'] || (pad && pad.special);
 
         const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
 
@@ -474,6 +691,7 @@ class StickmanGame {
         if (specialKey) {
             this.keys['Numpad0'] = false;
             this.keys['KeyG'] = false;
+            if (pad) pad.special = false;
             p.setFacing(dirToOpponent);
             p.triggerAttack('SPECIAL');
             return;
@@ -482,6 +700,7 @@ class StickmanGame {
         if (dashKey) {
             this.keys['Numpad3'] = false;
             this.keys['KeyM'] = false;
+            if (pad) pad.dash = false;
             const dashDir = leftKey ? -1 : (rightKey ? 1 : dirToOpponent);
             p.setFacing(dirToOpponent);
             p.triggerDash(dashDir);
@@ -491,6 +710,7 @@ class StickmanGame {
         if (punchKey) {
             this.keys['Numpad1'] = false;
             this.keys['KeyB'] = false;
+            if (pad) pad.punch = false;
             p.setFacing(dirToOpponent);
             p.requestPunchCombo();
             return;
@@ -499,12 +719,14 @@ class StickmanGame {
         if (kickKey) {
             this.keys['Numpad2'] = false;
             this.keys['KeyN'] = false;
+            if (pad) pad.kick = false;
             p.setFacing(dirToOpponent);
             p.requestKickCombo();
             return;
         }
 
         if (jumpKey && p.isGrounded && st !== 'ATTACK') {
+            if (pad) pad.jump = false;
             p.setFacing(dirToOpponent);
             p.triggerJump();
             return;
@@ -618,6 +840,16 @@ class StickmanGame {
                     // Attacker gains Ki energy
                     attacker.energy = Math.min(attacker.maxEnergy, attacker.energy + 12);
 
+                    // Gamepad Haptic Vibration Feedback
+                    const victimIndex = (victim === this.player1) ? 0 : 1;
+                    const attackerIndex = (attacker === this.player1) ? 0 : 1;
+                    if (isHeavy) {
+                        this.triggerGamepadRumble(victimIndex, 180, 0.6, 0.9);
+                        this.triggerGamepadRumble(attackerIndex, 100, 0.3, 0.6);
+                    } else {
+                        this.triggerGamepadRumble(victimIndex, 80, 0.3, 0.5);
+                    }
+
                     // Update combo counter
                     if (isP1Attacking) {
                         this.p1Combo++;
@@ -649,6 +881,10 @@ class StickmanGame {
                 this.vfx.spawnShockwave(p.group.position, p.colorHex, 3.0);
                 this.vfx.spawnHitSparks(p.group.position, p.colorHex, 24, 1.8);
                 this.vfx.triggerShake(0.55);
+
+                // Gamepad explosion rumble
+                this.triggerGamepadRumble(0, 220, 0.7, 1.0);
+                this.triggerGamepadRumble(1, 220, 0.7, 1.0);
 
                 target.takeDamage(p.damage, p.direction * 12.5, 5.5, true, p.owner);
             }

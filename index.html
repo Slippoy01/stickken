@@ -20,6 +20,12 @@
     <!-- 3D Floating Combat Text Container -->
     <div id="combat-text-container"></div>
 
+    <!-- Gamepad Floating Toast Notification -->
+    <div id="gamepad-toast">
+        <span id="gamepad-toast-icon">🎮</span>
+        <span id="gamepad-toast-msg">Gamepad Connected</span>
+    </div>
+
     <!-- Top Action Buttons (Audio, Music, Touch, Pause, Fullscreen) -->
     <div class="top-actions">
         <button id="btn-audio" class="icon-btn" title="Toggle Sound">🔊</button>
@@ -134,18 +140,75 @@
 
             <button id="btn-start-fight" class="btn-primary">START BATTLE</button>
 
-            <!-- Keyboard Controls Cheat-Sheet -->
-            <div class="controls-guide">
-                <div class="guide-title">🎮 Combat Controls (Player 1)</div>
-                <div><span class="key-tag">A</span> / <span class="key-tag">D</span> : Move Left / Right</div>
-                <div><span class="key-tag">W</span> or <span class="key-tag">Space</span> : Jump</div>
-                <div><span class="key-tag">J</span> <span class="key-tag">J</span> <span class="key-tag">J</span> : 3-Hit Punch Combo (Left Jab &rarr; Right Cross &rarr; Electric Uppercut!)</div>
-                <div><span class="key-tag">K</span> <span class="key-tag">K</span> <span class="key-tag">K</span> : 3-Hit Kick Combo (Left Kick &rarr; Right Kick &rarr; 360&deg; Tornado Spin Kick!)</div>
-                <div><span class="key-tag">L</span> or <span class="key-tag">Shift</span> : Shadow Dash / Back-Dash Evade</div>
-                <div><span class="key-tag">I</span> or <span class="key-tag">E</span> or <span class="key-tag">S</span> : Guard / Block (Negates 80% damage)</div>
-                <div><span class="key-tag">U</span> or <span class="key-tag">Q</span> : Special Ki Blast (Energy &ge; 40%)</div>
-                <div style="margin-top: 6px; color: #8892b0; font-size: 11px;">
-                    * Player 2 (Local 2P): <span class="key-tag">&larr;&rarr;</span> Move | <span class="key-tag">&uarr;</span> Jump | <span class="key-tag">Numpad 1</span> Punch | <span class="key-tag">Numpad 2</span> Kick | <span class="key-tag">Numpad 3</span> Dash | <span class="key-tag">Numpad 5</span> Block
+            <!-- Controls Guide Section (Keyboard & Gamepad Tabs) -->
+            <div class="controls-guide-wrapper">
+                <div class="controls-tabs">
+                    <button type="button" class="ctrl-tab-btn active" id="tab-keyboard">⌨️ Keyboard</button>
+                    <button type="button" class="ctrl-tab-btn" id="tab-gamepad">🎮 Gamepad</button>
+                    <div id="gamepad-badge-status" class="gamepad-status-pill disconnected" title="Status Gamepad">
+                        <span class="status-dot"></span>
+                        <span id="gamepad-status-text">No Gamepad</span>
+                    </div>
+                </div>
+
+                <!-- Keyboard Guide Pane -->
+                <div id="guide-pane-keyboard" class="guide-pane active">
+                    <div class="guide-title">⌨️ Combat Controls (Player 1 - Keyboard)</div>
+                    <div class="guide-row"><span class="key-tag">A</span> / <span class="key-tag">D</span> <span class="guide-action">Move Left / Right</span></div>
+                    <div class="guide-row"><span class="key-tag">W</span> or <span class="key-tag">Space</span> <span class="guide-action">Jump</span></div>
+                    <div class="guide-row"><span class="key-tag">J</span> <span class="key-tag">J</span> <span class="key-tag">J</span> <span class="guide-action">3-Hit Punch (Jab &rarr; Cross &rarr; Electric Uppercut)</span></div>
+                    <div class="guide-row"><span class="key-tag">K</span> <span class="key-tag">K</span> <span class="key-tag">K</span> <span class="guide-action">3-Hit Kick (High Kick &rarr; Heavy Kick &rarr; Tornado Kick)</span></div>
+                    <div class="guide-row"><span class="key-tag">L</span> or <span class="key-tag">Shift</span> <span class="guide-action">Shadow Dash / Back-Dash Evade</span></div>
+                    <div class="guide-row"><span class="key-tag">I</span> / <span class="key-tag">E</span> / <span class="key-tag">S</span> <span class="guide-action">Guard / Block (Negates 80% Damage)</span></div>
+                    <div class="guide-row"><span class="key-tag">U</span> or <span class="key-tag">Q</span> <span class="guide-action">Special Ki Blast (Energy &ge; 40%)</span></div>
+                    <div class="p2-note">
+                        * Player 2 (Local 2P): <span class="key-tag">&larr;&rarr;</span> Move | <span class="key-tag">&uarr;</span> Jump | <span class="key-tag">Num 1</span> Punch | <span class="key-tag">Num 2</span> Kick | <span class="key-tag">Num 3</span> Dash | <span class="key-tag">Num 5</span> Block
+                    </div>
+                </div>
+
+                <!-- Gamepad Guide Pane -->
+                <div id="guide-pane-gamepad" class="guide-pane">
+                    <div class="guide-title">🎮 Panduan Kontrol Gamepad (Xbox / PlayStation / Generic)</div>
+                    <div class="gamepad-grid">
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge dpad">D-Pad</span> <span class="guide-or">/</span> <span class="gamepad-badge dpad">Left Stick</span>
+                            <span class="guide-action">Bergerak Kiri / Kanan (Move)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-a">A / ✕</span> <span class="guide-or">atau</span> <span class="gamepad-badge dpad">Stick &uarr;</span>
+                            <span class="guide-action">Melompat (Jump)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-x">X / □</span>
+                            <span class="guide-action"><strong>3-Hit Punch</strong> (Jab &rarr; Straight Cross &rarr; Electric Uppercut!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-y">Y / △</span>
+                            <span class="guide-action"><strong>3-Hit Kick</strong> (High Kick &rarr; Heavy Kick &rarr; 360° Tornado Spin Kick!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-b">B / ○</span> <span class="guide-or">/</span> <span class="gamepad-badge btn-trigger">LT</span>
+                            <span class="guide-action"><strong>Special Ki Blast</strong> (Energi Ki &ge; 40%)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-bumper">LB</span> <span class="guide-or">/</span> <span class="gamepad-badge dpad">Stick &darr;</span>
+                            <span class="guide-action"><strong>Guard / Block</strong> (Menangkis 80% Kerusakan)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-bumper">RB</span> <span class="guide-or">/</span> <span class="gamepad-badge btn-trigger">RT</span>
+                            <span class="guide-action"><strong>Shadow Dash</strong> (Menghindar Cepat / Evade)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-meta">START / MENU</span>
+                            <span class="guide-action">Jeda / Pause Game &bull; Navigasi &amp; Konfirmasi Menu</span>
+                        </div>
+                    </div>
+                    <div class="p2-note gamepad-tip">
+                        🕹️ <strong>Dukungan 2 Gamepad &amp; Haptic Rumble:</strong><br>
+                        - Gamepad 1 mengendalikan <strong>Player 1 (Hero)</strong>.<br>
+                        - Sambungkan Gamepad 2 untuk langsung bertarung di mode <strong>2P Local Versus</strong>!<br>
+                        - Dilengkapi efek getar haptic saat serangan berat dan ledakan Ki!
+                    </div>
                 </div>
             </div>
         </div>
@@ -153,9 +216,32 @@
 
     <!-- Pause Menu Modal -->
     <div id="pause-modal" class="modal-overlay" style="display: none;">
-        <div class="menu-card" style="max-width: 420px;">
+        <div class="menu-card" style="max-width: 480px; max-height: 90vh; overflow-y: auto;">
             <h2 class="game-title" style="font-size: 28px;">GAME PAUSED</h2>
             <button id="btn-resume" class="btn-primary" style="margin-top: 15px;">RESUME</button>
+            <button id="btn-pause-controls" class="btn-secondary" style="margin-bottom: 10px;">🎮 PANDUAN KONTROL</button>
+            
+            <!-- Pause Controls Accordion Panel -->
+            <div id="pause-controls-panel" style="display: none; margin-bottom: 15px; text-align: left;">
+                <div class="controls-guide-wrapper" style="margin-top: 5px;">
+                    <div class="guide-title" style="color: #00f0ff;">🎮 Ringkasan Kontrol Gamepad</div>
+                    <div class="gamepad-grid" style="font-size: 12px;">
+                        <div class="gamepad-row"><span class="gamepad-badge dpad">Stick / D-Pad</span> Gerak Kiri / Kanan</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-a">A / ✕</span> Lompat</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-x">X / □</span> 3-Hit Punch Combo</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-y">Y / △</span> 3-Hit Kick Combo</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-b">B / ○</span> Special Ki Blast</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">LB</span> / <span class="gamepad-badge dpad">&darr;</span> Guard / Blok (-80% Dmg)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">RB</span> / <span class="gamepad-badge btn-trigger">RT</span> Shadow Dash Evade</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-meta">START</span> Resume / Jeda</div>
+                    </div>
+                    <div class="guide-title" style="color: #ffe600; margin-top: 12px;">⌨️ Keyboard P1</div>
+                    <div style="font-size: 12px; line-height: 1.6;">
+                        <span class="key-tag">A</span>/<span class="key-tag">D</span> Gerak | <span class="key-tag">W</span> Lompat | <span class="key-tag">J</span> Tinju | <span class="key-tag">K</span> Tendang | <span class="key-tag">L</span> Dash | <span class="key-tag">I</span> Blok | <span class="key-tag">U</span> Ki Blast
+                    </div>
+                </div>
+            </div>
+
             <button id="btn-restart" class="btn-secondary" style="margin-bottom: 10px;">RESTART ROUND</button>
             <button id="btn-menu" class="btn-secondary">MAIN MENU</button>
         </div>
@@ -186,6 +272,35 @@
             const selectMode = document.getElementById('select-mode');
             const selectDiff = document.getElementById('select-difficulty');
             const selectArena = document.getElementById('select-arena');
+
+            // Controls Tabs Switcher
+            const tabKeyboard = document.getElementById('tab-keyboard');
+            const tabGamepad = document.getElementById('tab-gamepad');
+            const paneKeyboard = document.getElementById('guide-pane-keyboard');
+            const paneGamepad = document.getElementById('guide-pane-gamepad');
+
+            tabKeyboard.addEventListener('click', () => {
+                tabKeyboard.classList.add('active');
+                tabGamepad.classList.remove('active');
+                paneKeyboard.classList.add('active');
+                paneGamepad.classList.remove('active');
+            });
+
+            tabGamepad.addEventListener('click', () => {
+                tabGamepad.classList.add('active');
+                tabKeyboard.classList.remove('active');
+                paneGamepad.classList.add('active');
+                paneKeyboard.classList.remove('active');
+            });
+
+            // Pause Modal controls
+            const btnPauseControls = document.getElementById('btn-pause-controls');
+            const pauseControlsPanel = document.getElementById('pause-controls-panel');
+            btnPauseControls.addEventListener('click', () => {
+                const isHidden = pauseControlsPanel.style.display === 'none';
+                pauseControlsPanel.style.display = isHidden ? 'block' : 'none';
+                btnPauseControls.textContent = isHidden ? '▲ TUTUP PANDUAN' : '🎮 PANDUAN KONTROL';
+            });
 
             // Start Fight
             startBtn.addEventListener('click', () => {
