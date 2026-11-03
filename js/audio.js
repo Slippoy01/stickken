@@ -291,67 +291,6 @@ class SoundEngine {
         noise.stop(now + 0.2);
     }
 
-    // Grapple / Throw grab connection
-    playThrowGrab() {
-        if (!this.ctx || this.isMuted) return;
-        const now = this.ctx.currentTime;
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.createNoiseBuffer(0.12);
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(1500, now);
-        filter.frequency.exponentialRampToValueAtTime(450, now + 0.10);
-        filter.Q.setValueAtTime(2.5, now);
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.01, now);
-        gain.gain.linearRampToValueAtTime(0.55, now + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.sfxGain);
-        noise.start(now);
-        noise.stop(now + 0.12);
-    }
-
-    // Grapple / Throw slam impact: heavy ground thud & earthquake bass
-    playThrowSlam() {
-        if (!this.ctx || this.isMuted) return;
-        const now = this.ctx.currentTime;
-
-        const sub = this.ctx.createOscillator();
-        const subGain = this.ctx.createGain();
-        sub.type = 'triangle';
-        sub.frequency.setValueAtTime(95, now);
-        sub.frequency.exponentialRampToValueAtTime(25, now + 0.38);
-
-        subGain.gain.setValueAtTime(0.95, now);
-        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.40);
-
-        sub.connect(subGain);
-        subGain.connect(this.sfxGain);
-        sub.start(now);
-        sub.stop(now + 0.42);
-
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.createNoiseBuffer(0.25);
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(600, now);
-        filter.frequency.exponentialRampToValueAtTime(80, now + 0.22);
-
-        const nGain = this.ctx.createGain();
-        nGain.gain.setValueAtTime(0.8, now);
-        nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-
-        noise.connect(filter);
-        filter.connect(nGain);
-        nGain.connect(this.sfxGain);
-        noise.start(now);
-        noise.stop(now + 0.25);
-    }
-
     // Special move charge
     playSpecialCharge() {
         if (!this.ctx || this.isMuted) return;

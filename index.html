@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stickman Shadow Showdown 3D | Three.js Fighting Game</title>
-    <link rel="stylesheet" href="css/style.css?v=6">
+    <link rel="stylesheet" href="css/style.css?v=4">
     <!-- Local Three.js with CDN fallback -->
     <script src="js/three.min.js"></script>
     <script>
@@ -100,9 +100,9 @@
         <div id="announcement-banner">ROUND 1</div>
     </div>
 
-    <!-- Touch / Mobile Controls (PS1 Kamen Rider Agito Layout - Dash on Right) -->
+    <!-- Touch / Mobile Controls (Arcade Dual-Thumb Layout) -->
     <div id="touch-controls" style="display: none;">
-        <!-- Left Thumb: Pure Directional D-Pad (Up, Left, Right, Down) -->
+        <!-- Left Thumb: Movement & Dash -->
         <div class="touch-cluster touch-movement-cluster">
             <div class="touch-dpad-grid">
                 <button id="touch-jump" class="touch-btn btn-dir-up" title="Jump (Lompat)">
@@ -114,44 +114,36 @@
                         <span class="touch-icon">◀</span>
                         <span class="touch-lbl">KIRI</span>
                     </button>
+                    <button id="touch-dash-l" class="touch-btn btn-dir-dash" title="Shadow Dash (Menghindar)">
+                        <span class="touch-icon">💨</span>
+                        <span class="touch-lbl">DASH</span>
+                    </button>
                     <button id="touch-right" class="touch-btn btn-dir-right" title="Move Right (Kanan)">
                         <span class="touch-icon">▶</span>
                         <span class="touch-lbl">KANAN</span>
                     </button>
                 </div>
-                <button id="touch-down" class="touch-btn btn-dir-down" title="Down / Duck (Bawah: +□ Sleding, +✕ Duck Guard, +○ Low Smash)">
-                    <span class="touch-icon">▼</span>
-                    <span class="touch-lbl">BAWAH</span>
-                </button>
             </div>
         </div>
 
-        <!-- Right Thumb: PS1 4-Face Buttons (□, △, ✕, ○) + Right-Side Dash -->
+        <!-- Right Thumb: Combat Action Attacks -->
         <div class="touch-cluster touch-action-cluster">
-            <!-- Right-Side Quick Dash Button -->
-            <div class="touch-utility-row" style="display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 6px;">
-                <button id="touch-dash-r" class="touch-btn btn-dir-dash" title="Shadow Dash (Melesat + □ untuk Dash Attack!)">
-                    <span class="touch-icon">💨</span>
-                    <span class="touch-lbl">DASH</span>
+            <div class="touch-actions-grid">
+                <button id="touch-block" class="touch-btn btn-guard" title="Guard / Tangkis">
+                    <span class="touch-icon">🛡️</span>
+                    <span class="touch-lbl">GUARD</span>
                 </button>
-            </div>
-            <!-- PS1 4-Button Grid: □ Serang, △ Banting, ✕ Guard/Dash, ○ Jurus -->
-            <div class="touch-actions-grid touch-tekken-grid">
-                <button id="touch-square" class="touch-btn btn-lp" title="□ SERANG: Tekan beruntun = Hit Combo | ▼+□ = Sleding | Dash+□ = Dash Attack">
-                    <span class="touch-icon" style="font-weight:900; color:#f472b6;">□</span>
-                    <span class="touch-lbl">SERANG</span>
+                <button id="touch-special" class="touch-btn btn-special" title="Special Ki Blast">
+                    <span class="touch-icon">⚡</span>
+                    <span class="touch-lbl">KI BLAST</span>
                 </button>
-                <button id="touch-triangle" class="touch-btn btn-throw" title="△ BANTING: Peluk &amp; Banting (Tembus Guard ✕!)">
-                    <span class="touch-icon" style="font-weight:900; color:#4ade80;">△</span>
-                    <span class="touch-lbl">BANTING</span>
+                <button id="touch-punch" class="touch-btn btn-punch" title="Punch Combo (Pukulan)">
+                    <span class="touch-icon">🥊</span>
+                    <span class="touch-lbl">TINJU</span>
                 </button>
-                <button id="touch-cross" class="touch-btn btn-rp" title="✕ GUARD / DASH: Tahan = Guard (Stand/Duck), Lepas = Dash!">
-                    <span class="touch-icon" style="font-weight:900; color:#60a5fa;">✕</span>
-                    <span class="touch-lbl">GUARD/DASH</span>
-                </button>
-                <button id="touch-circle" class="touch-btn btn-special" title="○ SPECIAL: Jurus Spesial + Kombinasi Arah (Netral, ▼, ▲, Udara)">
-                    <span class="touch-icon" style="font-weight:900; color:#f87171;">○</span>
-                    <span class="touch-lbl">SPECIAL</span>
+                <button id="touch-kick" class="touch-btn btn-kick" title="Kick Combo (Tendangan)">
+                    <span class="touch-icon">🥋</span>
+                    <span class="touch-lbl">TENDANG</span>
                 </button>
             </div>
         </div>
@@ -194,171 +186,116 @@
 
             <button id="btn-start-fight" class="btn-primary">START BATTLE</button>
 
-            <!-- Controls Guide Section (Kamen Rider Agito PS1 Style) -->
+            <!-- Controls Guide Section (Keyboard, Gamepad & Touch Tabs) -->
             <div class="controls-guide-wrapper">
                 <div class="controls-tabs">
-                    <button type="button" class="ctrl-tab-btn active" id="tab-tekken" style="color: #00f0ff; font-weight: bold;">🦗 Panduan Jurus (PS1 Agito)</button>
-                    <button type="button" class="ctrl-tab-btn" id="tab-touch">📱 Touch HP</button>
+                    <button type="button" class="ctrl-tab-btn active" id="tab-keyboard">⌨️ Keyboard</button>
                     <button type="button" class="ctrl-tab-btn" id="tab-gamepad">🎮 Gamepad</button>
-                    <button type="button" class="ctrl-tab-btn" id="tab-keyboard">⌨️ Keyboard</button>
+                    <button type="button" class="ctrl-tab-btn" id="tab-touch">📱 Layar Sentuh / HP</button>
                     <div id="gamepad-badge-status" class="gamepad-status-pill disconnected" title="Status Gamepad">
                         <span class="status-dot"></span>
                         <span id="gamepad-status-text">No Gamepad</span>
                     </div>
                 </div>
 
-                <!-- Kamen Rider Agito PS1 Move List Pane -->
-                <div id="guide-pane-tekken" class="guide-pane active">
-                    <div class="guide-title" style="color: #00f0ff; display: flex; justify-content: space-between; align-items: center;">
-                        <span>🦗 KAMEN RIDER AGITO (PS1) COMBAT SYSTEM</span>
-                        <span style="font-size: 11px; background: rgba(0,240,255,0.2); padding: 2px 8px; border-radius: 4px; border: 1px solid #00f0ff;">4-BUTTON ARCADE</span>
-                    </div>
-
-                    <div class="tekken-rules-summary">
-                        <div class="rule-chip"><span class="rule-icon">🛡️</span> <b>TOMBOL ✕ (TAHAN = GUARD, LEPAS = DASH):</b> Tahan <kbd>✕</kbd> berdiri = <b>Stand Guard</b> (tangkis serangan Atas). Tahan <kbd>▼ + ✕</kbd> = <b>Duck Guard</b> (tangkis serangan Bawah/Sleding). Begitu <kbd>✕</kbd> dilepas, karakter langsung <b>DASH</b>!</div>
-                        <div class="rule-chip"><span class="rule-icon">🤼</span> <b>TOMBOL △ (MELUK &amp; BANTING):</b> Dekati lawan lalu tekan <kbd>△</kbd> untuk memeluk &amp; membanting lawan! <b>Tembus Guard</b> meskipun lawan sedang menahan tombol <kbd>✕</kbd>!</div>
-                        <div class="rule-chip"><span class="rule-icon">⚡</span> <b>SISTEM 2 ARAH (ATAS vs BAWAH):</b> Serangan cuma dibagi <b>Atas (High)</b> dan <b>Bawah (Low)</b>. Stand Guard jebol oleh serangan Bawah (Sleding), sedangkan Duck Guard jebol oleh serangan Atas!</div>
-                    </div>
-
-                    <div style="overflow-x: auto; margin-top: 10px;">
-                        <table class="movelist-table">
-                            <thead>
-                                <tr>
-                                    <th>TOMBOL / AKSI</th>
-                                    <th>INPUT COMMAND</th>
-                                    <th>LEVEL</th>
-                                    <th>EFEK GERAKAN</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><b>Agito Rush Combo</b></td>
-                                    <td><kbd>□</kbd> &rarr; <kbd>□</kbd> &rarr; <kbd>□</kbd> &rarr; <kbd>□</kbd></td>
-                                    <td><span class="badge-hit badge-high">Atas (High)</span></td>
-                                    <td>Kombo 4-Hit otomatis (Jab &rarr; Cross &rarr; Roundhouse &rarr; 360° Tornado Kick)!</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Dash Attack (Serangan Melesat)</b></td>
-                                    <td><kbd>Dash</kbd> + <kbd>□</kbd></td>
-                                    <td><span class="badge-hit badge-high">Atas (High)</span></td>
-                                    <td>Lepas <kbd>✕</kbd> (atau tekan <kbd>💨 Dash</kbd>) lalu tekan <kbd>□</kbd> untuk menerjang lawan!</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Sliding Kick (Sleding)</b></td>
-                                    <td><kbd>▼ Bawah</kbd> + <kbd>□</kbd></td>
-                                    <td><span class="badge-hit badge-low">Bawah (Low)</span></td>
-                                    <td>Meluncur sleding di lantai menjegal kaki lawan (Tembus Stand Guard!).</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Guard &amp; Dash Cancel</b></td>
-                                    <td>Tahan <kbd>✕</kbd> / Lepas <kbd>✕</kbd></td>
-                                    <td><span class="badge-hit badge-mid">Defense</span></td>
-                                    <td>Tahan <kbd>✕</kbd> = Stand Guard | Tahan <kbd>▼+✕</kbd> = Duck Guard | Lepas <kbd>✕</kbd> = Dash!</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Grapple Hug &amp; Slam (Banting)</b></td>
-                                    <td><kbd>△</kbd> (Jarak Dekat)</td>
-                                    <td><span class="badge-hit badge-throw">Throw (Unblockable)</span></td>
-                                    <td>Memeluk &amp; membanting lawan ke lantai! Tembus Stand &amp; Duck Guard!</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Flame Ki Blast (Special 1)</b></td>
-                                    <td>Netral / <kbd>▶</kbd> + <kbd>○</kbd></td>
-                                    <td><span class="badge-hit badge-high">Atas (High)</span></td>
-                                    <td>Menembakkan gelombang energi jarak jauh (25% Energi).</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Earthquake Smash (Special 2)</b></td>
-                                    <td><kbd>▼ Bawah</kbd> + <kbd>○</kbd></td>
-                                    <td><span class="badge-hit badge-low">Bawah (Low)</span></td>
-                                    <td>Menghantam lantai dengan gelombang gempa bawah (Tembus Stand Guard!).</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Rising Dragon Upper (Special 3)</b></td>
-                                    <td><kbd>▲ Atas</kbd> / <kbd>◀</kbd> + <kbd>○</kbd></td>
-                                    <td><span class="badge-hit badge-high">Atas (Launcher)</span></td>
-                                    <td>Melesat ke atas melontarkan lawan tinggi ke langit!</td>
-                                </tr>
-                                <tr>
-                                    <td><b>Flying Rider Kick! (Special Udara)</b></td>
-                                    <td>Saat Lompat + <kbd>○</kbd></td>
-                                    <td><span class="badge-hit badge-high">Atas (Dive Kick)</span></td>
-                                    <td>Menukik tajam dari udara menghantam lawan dengan tendangan maut!</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Touch Mobile Guide Pane -->
-                <div id="guide-pane-touch" class="guide-pane">
-                    <div class="guide-title">📱 Panduan Kontrol Layar Sentuh / HP (Kamen Rider Agito Style)</div>
-                    <div class="gamepad-grid">
-                        <div class="gamepad-row">
-                            <span class="gamepad-badge dpad">◀ KIRI</span> / <span class="gamepad-badge dpad">▶ KANAN</span> / <span class="gamepad-badge dpad">▲ LOMPAT</span> / <span class="gamepad-badge dpad">▼ BAWAH</span>
-                            <span class="guide-action">D-Pad Arah di sebelah kiri layar</span>
-                        </div>
-                        <div class="gamepad-row">
-                            <span class="gamepad-badge btn-x">□ SERANG</span>
-                            <span class="guide-action">Tekan beruntun = <strong>4-Hit Combo</strong> &bull; <strong>▼ + □</strong> = <strong>Sleding</strong> &bull; <strong>Dash + □</strong> = <strong>Dash Attack</strong></span>
-                        </div>
-                        <div class="gamepad-row">
-                            <span class="gamepad-badge btn-a">✕ GUARD / DASH</span>
-                            <span class="guide-action"><strong>Tahan ✕</strong> = Guard (Tahan <strong>▼+✕</strong> = Duck Guard) &bull; <strong>Lepas ✕</strong> = Langsung <strong>DASH</strong>!</span>
-                        </div>
-                        <div class="gamepad-row">
-                            <span class="gamepad-badge btn-y">△ BANTING</span>
-                            <span class="guide-action"><strong>Meluk &amp; Banting</strong> lawan di jarak dekat (Tembus walaupun lawan tahan ✕!)</span>
-                        </div>
-                        <div class="gamepad-row">
-                            <span class="gamepad-badge btn-b">○ SPECIAL</span>
-                            <span class="guide-action">Jurus Spesial: <strong>○</strong> (Ki Blast), <strong>▼+○</strong> (Gempa Bawah), <strong>▲+○</strong> (Uppercut), <strong>Udara+○</strong> (Rider Kick!)</span>
-                        </div>
-                        <div class="gamepad-row">
-                            <span class="gamepad-badge btn-bumper">💨 DASH (Kanan Atas)</span>
-                            <span class="guide-action">Tombol pintas Dash di sebelah kanan layar (bisa langsung disambung <strong>□</strong> atau <strong>▼+□</strong>!)</span>
-                        </div>
+                <!-- Keyboard Guide Pane -->
+                <div id="guide-pane-keyboard" class="guide-pane active">
+                    <div class="guide-title">⌨️ Combat Controls (Player 1 - Keyboard)</div>
+                    <div class="guide-row"><span class="key-tag">A</span> / <span class="key-tag">D</span> <span class="guide-action">Move Left / Right</span></div>
+                    <div class="guide-row"><span class="key-tag">W</span> or <span class="key-tag">Space</span> <span class="guide-action">Jump</span></div>
+                    <div class="guide-row"><span class="key-tag">J</span> <span class="key-tag">J</span> <span class="key-tag">J</span> <span class="guide-action">3-Hit Punch (Jab &rarr; Cross &rarr; Electric Uppercut)</span></div>
+                    <div class="guide-row"><span class="key-tag">K</span> <span class="key-tag">K</span> <span class="key-tag">K</span> <span class="guide-action">3-Hit Kick (High Kick &rarr; Heavy Kick &rarr; Tornado Kick)</span></div>
+                    <div class="guide-row"><span class="key-tag">L</span> or <span class="key-tag">Shift</span> <span class="guide-action">Shadow Dash / Back-Dash Evade</span></div>
+                    <div class="guide-row"><span class="key-tag">I</span> / <span class="key-tag">E</span> / <span class="key-tag">S</span> <span class="guide-action">Guard / Block (Negates 80% Damage)</span></div>
+                    <div class="guide-row"><span class="key-tag">U</span> or <span class="key-tag">Q</span> <span class="guide-action">Special Ki Blast (Energy &ge; 40%)</span></div>
+                    <div class="p2-note">
+                        * Player 2 (Local 2P): <span class="key-tag">&larr;&rarr;</span> Move | <span class="key-tag">&uarr;</span> Jump | <span class="key-tag">Num 1</span> Punch | <span class="key-tag">Num 2</span> Kick | <span class="key-tag">Num 3</span> Dash | <span class="key-tag">Num 5</span> Block
                     </div>
                 </div>
 
                 <!-- Gamepad Guide Pane -->
                 <div id="guide-pane-gamepad" class="guide-pane">
-                    <div class="guide-title">🎮 Panduan Kontrol Gamepad (PlayStation / Xbox)</div>
+                    <div class="guide-title">🎮 Panduan Kontrol Gamepad (Xbox / PlayStation / Generic)</div>
                     <div class="gamepad-grid">
                         <div class="gamepad-row">
-                            <span class="gamepad-badge btn-x">□ / X</span>
-                            <span class="guide-action"><strong>Hit Combo</strong> (<kbd>□-□-□-□</kbd>) &bull; <strong>▼ + □</strong> = Sleding &bull; <strong>Dash + □</strong> = Dash Attack</span>
+                            <span class="gamepad-badge dpad">D-Pad</span> <span class="guide-or">/</span> <span class="gamepad-badge dpad">Left Stick</span>
+                            <span class="guide-action">Bergerak Kiri / Kanan (Move)</span>
                         </div>
                         <div class="gamepad-row">
-                            <span class="gamepad-badge btn-a">✕ / A</span>
-                            <span class="guide-action"><strong>Tahan ✕</strong> = Stand Guard (<strong>▼+✕</strong> = Duck Guard) &bull; <strong>Lepas ✕</strong> = Dash Melesat!</span>
+                            <span class="gamepad-badge btn-a">A / ✕</span> <span class="guide-or">atau</span> <span class="gamepad-badge dpad">Stick &uarr;</span>
+                            <span class="guide-action">Melompat (Jump)</span>
                         </div>
                         <div class="gamepad-row">
-                            <span class="gamepad-badge btn-y">△ / Y</span>
-                            <span class="guide-action"><strong>Meluk &amp; Banting</strong> (Tembus Guard lawan yang sedang menahan ✕!)</span>
+                            <span class="gamepad-badge btn-x">X / □</span>
+                            <span class="guide-action"><strong>3-Hit Punch</strong> (Jab &rarr; Straight Cross &rarr; Electric Uppercut!)</span>
                         </div>
                         <div class="gamepad-row">
-                            <span class="gamepad-badge btn-b">○ / B</span>
-                            <span class="guide-action"><strong>Special Move + Arah</strong>: Netral (Blast), ▼ (Low Smash), ▲ (Uppercut), Udara (Rider Kick)</span>
+                            <span class="gamepad-badge btn-y">Y / △</span>
+                            <span class="guide-action"><strong>3-Hit Kick</strong> (High Kick &rarr; Heavy Kick &rarr; 360° Tornado Spin Kick!)</span>
                         </div>
                         <div class="gamepad-row">
-                            <span class="gamepad-badge dpad">D-Pad / Stick</span>
-                            <span class="guide-action"><strong>◀ / ▶</strong> Jalan &bull; <strong>▲ / L1</strong> Lompat &bull; <strong>▼</strong> Merunduk (Duck)</span>
+                            <span class="gamepad-badge btn-b">B / ○</span> <span class="guide-or">/</span> <span class="gamepad-badge btn-trigger">LT</span>
+                            <span class="guide-action"><strong>Special Ki Blast</strong> (Energi Ki &ge; 40%)</span>
                         </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-bumper">LB</span> <span class="guide-or">/</span> <span class="gamepad-badge dpad">Stick &darr;</span>
+                            <span class="guide-action"><strong>Guard / Block</strong> (Menangkis 80% Kerusakan)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-bumper">RB</span> <span class="guide-or">/</span> <span class="gamepad-badge btn-trigger">RT</span>
+                            <span class="guide-action"><strong>Shadow Dash</strong> (Menghindar Cepat / Evade)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-meta">START / MENU</span>
+                            <span class="guide-action">Jeda / Pause Game &bull; Navigasi &amp; Konfirmasi Menu</span>
+                        </div>
+                    </div>
+                    <div class="p2-note gamepad-tip">
+                        🕹️ <strong>Dukungan 2 Gamepad &amp; Haptic Rumble:</strong><br>
+                        - Gamepad 1 mengendalikan <strong>Player 1 (Hero)</strong>.<br>
+                        - Sambungkan Gamepad 2 untuk langsung bertarung di mode <strong>2P Local Versus</strong>!<br>
+                        - Dilengkapi efek getar haptic saat serangan berat dan ledakan Ki!
                     </div>
                 </div>
 
-                <!-- Keyboard Guide Pane -->
-                <div id="guide-pane-keyboard" class="guide-pane">
-                    <div class="guide-title">⌨️ Panduan Kontrol Keyboard (PC)</div>
-                    <div class="guide-row"><span class="key-tag">A</span> / <span class="key-tag">D</span> / <span class="key-tag">W</span> / <span class="key-tag">S</span> <span class="guide-action">Kiri / Kanan / Lompat (W) / Bawah (S)</span></div>
-                    <div class="guide-row"><span class="key-tag">J</span> (wakili □) <span class="guide-action"><strong>Hit Combo</strong> (<kbd>J-J-J-J</kbd>) &bull; <kbd>S + J</kbd> = Sleding &bull; <kbd>Dash + J</kbd> = Dash Attack</span></div>
-                    <div class="guide-row"><span class="key-tag">K</span> (wakili ✕) <span class="guide-action"><strong>Tahan K</strong> = Stand Guard (<kbd>S + Tahan K</kbd> = Duck Guard) &bull; <strong>Lepas K</strong> = Dash!</span></div>
-                    <div class="guide-row"><span class="key-tag">I</span> atau <span class="key-tag">G</span> (wakili △) <span class="guide-action"><strong>Meluk &amp; Banting</strong> (Tembus Guard!)</span></div>
-                    <div class="guide-row"><span class="key-tag">L</span> atau <span class="key-tag">U</span> (wakili ○) <span class="guide-action"><strong>Special Move + Arah</strong> (<kbd>L</kbd>, <kbd>S+L</kbd>, <kbd>W+L</kbd>, <kbd>Udara+L</kbd>)</span></div>
-                    <div class="guide-row"><span class="key-tag">Shift</span> <span class="guide-action">Pintasan Dash Instan</span></div>
-                    <div class="p2-note">
-                        * Player 2 (Local 2P): <span class="key-tag">&larr;&rarr;&uarr;&darr;</span> Arah | <span class="key-tag">Num 1 / B</span> (□ Serang) | <span class="key-tag">Num 2 / N</span> (✕ Guard/Dash) | <span class="key-tag">Num 4 / M</span> (△ Banting) | <span class="key-tag">Num 5 / H</span> (○ Special)
+                <!-- Touch Mobile Guide Pane -->
+                <div id="guide-pane-touch" class="guide-pane">
+                    <div class="guide-title">📱 Panduan Kontrol Layar Sentuh / HP</div>
+                    <div class="gamepad-grid">
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge dpad">◀ KIRI</span> <span class="guide-or">/</span> <span class="gamepad-badge dpad">▶ KANAN</span>
+                            <span class="guide-action">Berjalan mendekat atau menjaga jarak</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-a">▲ LOMPAT</span>
+                            <span class="guide-action">Melompat ke udara (dapat dikombinasikan dengan tendangan udara!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-bumper">💨 DASH</span>
+                            <span class="guide-action">Menghindar kilat (*Shadow Dash*)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-x">🥊 TINJU</span>
+                            <span class="guide-action"><strong>3-Hit Punch</strong> (Jab &rarr; Straight Cross &rarr; Electric Uppercut!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-y">🥋 TENDANG</span>
+                            <span class="guide-action"><strong>3-Hit Kick</strong> (High Kick &rarr; Heavy Kick &rarr; 360° Tornado Kick!)</span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-guard">🛡️ GUARD</span>
+                            <span class="guide-action">Tahan untuk <strong>menangkis 80% serangan musuh</strong></span>
+                        </div>
+                        <div class="gamepad-row">
+                            <span class="gamepad-badge btn-special">⚡ KI BLAST</span>
+                            <span class="guide-action">Tembakan proyektil energi dahsyat (*Ki &ge; 40%*)</span>
+                        </div>
+                    </div>
+                    <div class="p2-note gamepad-tip">
+                        💡 <strong>Tips Main di HP:</strong><br>
+                        - Tombol sentuh otomatis muncul saat membuka game di layar HP atau tablet.<br>
+                        - Anda juga bisa memunculkan atau menyembunyikan tombol sentuh kapan saja dengan menekan ikon <strong>📱</strong> di bar atas.<br>
+                        - Dilengkapi feedback getar saat tombol disentuh untuk feel arcade yang mantap!
                     </div>
                 </div>
             </div>
@@ -427,12 +364,20 @@
             <!-- Pause Controls Accordion Panel -->
             <div id="pause-controls-panel" style="display: none; margin-bottom: 15px; text-align: left;">
                 <div class="controls-guide-wrapper" style="margin-top: 5px;">
-                    <div class="guide-title" style="color: #00f0ff;">🦗 Panduan Kamen Rider Agito (PS1)</div>
+                    <div class="guide-title" style="color: #00f0ff;">🎮 Ringkasan Kontrol Gamepad</div>
                     <div class="gamepad-grid" style="font-size: 12px;">
-                        <div class="gamepad-row"><span class="gamepad-badge btn-x">□ / J</span> <strong>SERANG:</strong> Kombo □-□-□-□ | <strong>▼+□</strong> = Sleding | <strong>Dash+□</strong> = Dash Attack</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-a">✕ / K</span> <strong>TAHAN = GUARD</strong> (▼+✕ = Duck Guard) | <strong>LEPAS = DASH!</strong></div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-y">△ / I</span> <strong>BANTING:</strong> Peluk &amp; Banting (Tembus Guard ✕!)</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-b">○ / L</span> <strong>SPECIAL:</strong> Netral (Blast), ▼+○ (Gempa Bawah), ▲+○ (Uppercut), Udara+○ (Rider Kick)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge dpad">Stick / D-Pad</span> Gerak Kiri / Kanan</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-a">A / ✕</span> Lompat</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-x">X / □</span> 3-Hit Punch Combo</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-y">Y / △</span> 3-Hit Kick Combo</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-b">B / ○</span> Special Ki Blast</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">LB</span> / <span class="gamepad-badge dpad">&darr;</span> Guard / Blok (-80% Dmg)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">RB</span> / <span class="gamepad-badge btn-trigger">RT</span> Shadow Dash Evade</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-meta">START</span> Resume / Jeda</div>
+                    </div>
+                    <div class="guide-title" style="color: #ffe600; margin-top: 12px;">⌨️ Keyboard P1</div>
+                    <div style="font-size: 12px; line-height: 1.6;">
+                        <span class="key-tag">A</span>/<span class="key-tag">D</span> Gerak | <span class="key-tag">W</span> Lompat | <span class="key-tag">J</span> Tinju | <span class="key-tag">K</span> Tendang | <span class="key-tag">L</span> Dash | <span class="key-tag">I</span> Blok | <span class="key-tag">U</span> Ki Blast
                     </div>
                 </div>
             </div>
@@ -453,13 +398,13 @@
     </div>
 
     <!-- Game Scripts (Modular & Clean) -->
-    <script src="js/audio.js?v=6"></script>
-    <script src="js/vfx.js?v=6"></script>
-    <script src="js/stickman.js?v=6"></script>
-    <script src="js/arena.js?v=6"></script>
-    <script src="js/ai.js?v=6"></script>
-    <script src="js/network.js?v=6"></script>
-    <script src="js/game.js?v=6"></script>
+    <script src="js/audio.js?v=4"></script>
+    <script src="js/vfx.js?v=4"></script>
+    <script src="js/stickman.js?v=4"></script>
+    <script src="js/arena.js?v=4"></script>
+    <script src="js/ai.js?v=4"></script>
+    <script src="js/network.js?v=4"></script>
+    <script src="js/game.js?v=4"></script>
 
     <!-- UI Event Wiring -->
     <script>
