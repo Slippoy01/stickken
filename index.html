@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stickman Shadow Showdown 3D | Three.js Fighting Game</title>
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=4">
     <!-- Local Three.js with CDN fallback -->
     <script src="js/three.min.js"></script>
     <script>
@@ -12,6 +12,8 @@
             document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
         }
     </script>
+    <!-- PeerJS for Realtime WebRTC P2P Multiplayer (Zero Server Cost) -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
     <!-- 3D Three.js WebGL Canvas Container -->
@@ -37,6 +39,16 @@
 
     <!-- In-Game Fighting HUD -->
     <div id="hud">
+        <!-- Online PvP Status Pill -->
+        <div id="online-hud-pill" class="online-hud-pill" style="display: none;">
+            <span class="online-live-dot"></span>
+            <span id="online-hud-role">P1 (HOST)</span>
+            <span class="online-pill-divider">•</span>
+            <span id="online-hud-room">ROOM: TK88</span>
+            <span class="online-pill-divider">•</span>
+            <span id="online-hud-ping">📶 --ms</span>
+        </div>
+
         <div class="top-bar">
             <!-- Player 1 HUD -->
             <div class="fighter-hud p1-hud">
@@ -148,12 +160,13 @@
                     <label for="select-mode">Game Mode</label>
                     <select id="select-mode" class="select-control">
                         <option value="DUEL_AI">1P vs AI Duel</option>
+                        <option value="ONLINE_PVP" style="color: #00f0ff; font-weight: bold;">🌐 Online 1v1 PvP (WebRTC)</option>
                         <option value="VERSUS_2P">2P Local Versus</option>
                         <option value="SURVIVAL">Endless Survival</option>
                     </select>
                 </div>
 
-                <div class="option-group">
+                <div class="option-group" id="group-difficulty">
                     <label for="select-difficulty">AI Difficulty</label>
                     <select id="select-difficulty" class="select-control">
                         <option value="easy">Easy (Rookie)</option>
@@ -289,6 +302,58 @@
         </div>
     </div>
 
+    <!-- Online PvP Matchmaking Modal -->
+    <div id="online-modal" class="modal-overlay" style="display: none;">
+        <div class="menu-card online-card">
+            <h2 class="game-title" style="font-size: 26px;">🌐 ONLINE 1v1 REALTIME PVP</h2>
+            <div class="game-subtitle" style="margin-bottom: 18px;">P2P WebRTC Direct Connection • Zero Server Cost &amp; Zero Lag</div>
+
+            <!-- Mode Tabs: Host vs Join -->
+            <div class="online-tabs">
+                <button type="button" class="online-tab-btn active" id="btn-tab-host">👑 BIKIN ROOM (HOST)</button>
+                <button type="button" class="online-tab-btn" id="btn-tab-join">⚔️ GABUNG ROOM</button>
+            </div>
+
+            <!-- Tab 1: Host Room Panel -->
+            <div id="panel-host" class="online-panel active">
+                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 12px;">
+                    Bagikan kode atau link ini ke teman tongkrongan untuk bertarung:
+                </p>
+                <div class="room-code-display" id="host-room-code-display">
+                    <span class="room-code-text" id="host-room-code">MEMBUAT...</span>
+                    <button type="button" class="btn-copy-code" id="btn-copy-room-link" title="Salin Link Mabar">
+                        📋 SALIN LINK
+                    </button>
+                </div>
+                <div class="online-status-pulse">
+                    <span class="pulse-ring"></span>
+                    <span id="host-status-msg">Menghubungkan ke PeerJS Cloud...</span>
+                </div>
+            </div>
+
+            <!-- Tab 2: Join Room Panel -->
+            <div id="panel-join" class="online-panel">
+                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 12px;">
+                    Masukkan Kode Room dari temanmu (misal: <code>TK88</code>):
+                </p>
+                <div class="join-input-group">
+                    <input type="text" id="input-room-code" class="input-room" placeholder="KODE ROOM..." maxlength="10" autocomplete="off" />
+                    <button type="button" class="btn-primary" id="btn-submit-join" style="width: auto; padding: 12px 24px; margin-bottom: 0;">
+                        FIGHT!
+                    </button>
+                </div>
+                <div class="online-status-pulse" id="join-status-pulse" style="display: none;">
+                    <span class="pulse-ring"></span>
+                    <span id="join-status-msg">Menghubungkan ke Host...</span>
+                </div>
+            </div>
+
+            <button type="button" class="btn-secondary" id="btn-close-online" style="margin-top: 20px;">
+                KEMBALI KE MENU UTAMA
+            </button>
+        </div>
+    </div>
+
     <!-- Pause Menu Modal -->
     <div id="pause-modal" class="modal-overlay" style="display: none;">
         <div class="menu-card" style="max-width: 480px; max-height: 90vh; overflow-y: auto;">
@@ -333,12 +398,13 @@
     </div>
 
     <!-- Game Scripts (Modular & Clean) -->
-    <script src="js/audio.js?v=3"></script>
-    <script src="js/vfx.js?v=3"></script>
-    <script src="js/stickman.js?v=3"></script>
-    <script src="js/arena.js?v=3"></script>
-    <script src="js/ai.js?v=3"></script>
-    <script src="js/game.js?v=3"></script>
+    <script src="js/audio.js?v=4"></script>
+    <script src="js/vfx.js?v=4"></script>
+    <script src="js/stickman.js?v=4"></script>
+    <script src="js/arena.js?v=4"></script>
+    <script src="js/ai.js?v=4"></script>
+    <script src="js/network.js?v=4"></script>
+    <script src="js/game.js?v=4"></script>
 
     <!-- UI Event Wiring -->
     <script>
@@ -347,6 +413,22 @@
             const selectMode = document.getElementById('select-mode');
             const selectDiff = document.getElementById('select-difficulty');
             const selectArena = document.getElementById('select-arena');
+            const groupDiff = document.getElementById('group-difficulty');
+
+            // Online PvP Modal Elements
+            const onlineModal = document.getElementById('online-modal');
+            const btnTabHost = document.getElementById('btn-tab-host');
+            const btnTabJoin = document.getElementById('btn-tab-join');
+            const panelHost = document.getElementById('panel-host');
+            const panelJoin = document.getElementById('panel-join');
+            const hostRoomCode = document.getElementById('host-room-code');
+            const hostStatusMsg = document.getElementById('host-status-msg');
+            const btnCopyLink = document.getElementById('btn-copy-room-link');
+            const inputRoomCode = document.getElementById('input-room-code');
+            const btnSubmitJoin = document.getElementById('btn-submit-join');
+            const joinStatusPulse = document.getElementById('join-status-pulse');
+            const joinStatusMsg = document.getElementById('join-status-msg');
+            const btnCloseOnline = document.getElementById('btn-close-online');
 
             // Controls Tabs Switcher (Keyboard, Gamepad, Touch)
             const tabKeyboard = document.getElementById('tab-keyboard');
@@ -367,6 +449,119 @@
             tabGamepad.addEventListener('click', () => switchTab(tabGamepad, paneGamepad));
             tabTouch.addEventListener('click', () => switchTab(tabTouch, paneTouch));
 
+            // Hide/Show AI Difficulty dropdown based on Mode
+            selectMode.addEventListener('change', () => {
+                if (selectMode.value === 'ONLINE_PVP' || selectMode.value === 'VERSUS_2P') {
+                    if (groupDiff) groupDiff.style.display = 'none';
+                } else {
+                    if (groupDiff) groupDiff.style.display = 'block';
+                }
+
+                if (selectMode.value === 'ONLINE_PVP') {
+                    openOnlineModal();
+                }
+            });
+
+            // Online Modal Tabs (Host vs Join)
+            btnTabHost.addEventListener('click', () => {
+                btnTabHost.classList.add('active');
+                btnTabJoin.classList.remove('active');
+                panelHost.classList.add('active');
+                panelJoin.classList.remove('active');
+                startHosting();
+            });
+
+            btnTabJoin.addEventListener('click', () => {
+                btnTabJoin.classList.add('active');
+                btnTabHost.classList.remove('active');
+                panelJoin.classList.add('active');
+                panelHost.classList.remove('active');
+            });
+
+            function openOnlineModal() {
+                onlineModal.style.display = 'flex';
+                // Default to Host tab if not joining via URL
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.has('room')) {
+                    const room = urlParams.get('room');
+                    btnTabJoin.click();
+                    inputRoomCode.value = room;
+                    joinStatusPulse.style.display = 'flex';
+                    joinStatusMsg.textContent = `Menghubungkan ke Room ${room}...`;
+                    window.networkManager.joinRoom(room);
+                } else {
+                    btnTabHost.click();
+                }
+            }
+
+            function startHosting() {
+                if (!window.networkManager.isConnected) {
+                    window.networkManager.createRoom();
+                }
+            }
+
+            // Copy Shareable Room Link
+            btnCopyLink.addEventListener('click', () => {
+                const code = window.networkManager.roomCode;
+                if (!code) return;
+                const link = `${window.location.origin}${window.location.pathname}?room=${code}`;
+                navigator.clipboard.writeText(link).then(() => {
+                    const orig = btnCopyLink.textContent;
+                    btnCopyLink.textContent = '✅ LINK TERSALIN!';
+                    setTimeout(() => btnCopyLink.textContent = orig, 2000);
+                }).catch(() => {
+                    prompt('Salin link room ini dan kirim ke temanmu:', link);
+                });
+            });
+
+            // Join Room Click
+            btnSubmitJoin.addEventListener('click', () => {
+                const code = inputRoomCode.value.trim();
+                if (!code) {
+                    alert('Masukkan Kode Room terlebih dahulu!');
+                    return;
+                }
+                joinStatusPulse.style.display = 'flex';
+                joinStatusMsg.textContent = `Menghubungkan ke Host (${code.toUpperCase()})...`;
+                window.networkManager.joinRoom(code);
+            });
+
+            inputRoomCode.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') btnSubmitJoin.click();
+            });
+
+            btnCloseOnline.addEventListener('click', () => {
+                onlineModal.style.display = 'none';
+                selectMode.value = 'DUEL_AI';
+                if (groupDiff) groupDiff.style.display = 'block';
+                window.networkManager.disconnect();
+            });
+
+            // Network Manager Status Listeners for UI
+            if (window.networkManager) {
+                window.networkManager.onStatusChange = (info) => {
+                    if (info.isHost) {
+                        hostRoomCode.textContent = info.code || '...';
+                        hostStatusMsg.textContent = info.text || 'Menunggu lawan...';
+                    } else {
+                        joinStatusMsg.textContent = info.text || 'Menghubungkan...';
+                    }
+                };
+
+                window.networkManager.onError = (msg) => {
+                    alert(msg);
+                    joinStatusPulse.style.display = 'none';
+                    hostStatusMsg.textContent = 'Gagal membuat room. Silakan coba lagi.';
+                };
+            }
+
+            // Auto-check if URL has ?room=... for 1-click Mabar!
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('room')) {
+                selectMode.value = 'ONLINE_PVP';
+                openOnlineModal();
+            }
+
             // Pause Modal controls
             const btnPauseControls = document.getElementById('btn-pause-controls');
             const pauseControlsPanel = document.getElementById('pause-controls-panel');
@@ -376,11 +571,16 @@
                 btnPauseControls.textContent = isHidden ? '▲ TUTUP PANDUAN' : '🎮 PANDUAN KONTROL';
             });
 
-            // Start Fight
+            // Start Fight button in Main Menu
             startBtn.addEventListener('click', () => {
                 const mode = selectMode.value;
                 const diff = selectDiff.value;
                 const arena = selectArena.value;
+
+                if (mode === 'ONLINE_PVP') {
+                    openOnlineModal();
+                    return;
+                }
 
                 if (window.game) {
                     window.game.switchArena(arena);
@@ -404,17 +604,19 @@
             });
 
             document.getElementById('btn-menu').addEventListener('click', () => {
+                if (window.networkManager) window.networkManager.disconnect();
                 location.reload();
             });
 
             // Victory Modal controls
             document.getElementById('btn-rematch').addEventListener('click', () => {
                 if (window.game) {
-                    window.game.startMatch(window.game.gameMode, window.game.difficulty);
+                    window.game.triggerRematch();
                 }
             });
 
             document.getElementById('btn-victory-menu').addEventListener('click', () => {
+                if (window.networkManager) window.networkManager.disconnect();
                 location.reload();
             });
 
@@ -474,4 +676,3 @@
     </script>
 </body>
 </html>
-

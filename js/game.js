@@ -1,7 +1,7 @@
 /**
  * Stickman Shadow Showdown 3D - Main Game Engine
  * Collision physics, pushboxes, hitboxes, dynamic camera, round management,
- * input system (keyboard + touch), and game loop.
+ * input system (keyboard + touch + gamepad + WebRTC P2P Realtime Online PvP), and game loop.
  */
 
 class StickmanGame {
@@ -10,7 +10,7 @@ class StickmanGame {
         this.width = window.innerWidth;
         this.height = window.innerHeight;
 
-        // Game Modes: 'DUEL_AI', 'VERSUS_2P', 'SURVIVAL'
+        // Game Modes: 'DUEL_AI', 'VERSUS_2P', 'ONLINE_PVP', 'SURVIVAL'
         this.gameMode = 'DUEL_AI';
         this.difficulty = 'normal'; // 'easy', 'normal', 'brutal'
 
@@ -50,6 +50,17 @@ class StickmanGame {
         this.gamepadToastMsgEl = document.getElementById('gamepad-toast-msg');
         this.gamepadToastTimer = null;
 
+        // WebRTC Online PvP Subsystem State
+        this.isOnline = false;
+        this.isHost = true;
+        this.remoteKeys = { left: false, right: false, block: false };
+        this.lastSentMove = { left: false, right: false, block: false };
+        this.networkSyncTimer = 0;
+        this.onlineHudPill = document.getElementById('online-hud-pill');
+        this.onlineHudRole = document.getElementById('online-hud-role');
+        this.onlineHudRoom = document.getElementById('online-hud-room');
+        this.onlineHudPing = document.getElementById('online-hud-ping');
+
         // Three.js Core
         this.initThree();
 
@@ -66,6 +77,7 @@ class StickmanGame {
         this.initFighters();
         this.initInput();
         this.initHUD();
+        this.initNetwork();
 
         // Animation Loop
         this.clock = new THREE.Clock();
@@ -143,6 +155,169 @@ class StickmanGame {
         this.updateGamepadBadge();
     }
 
+    // ==========================================
+    // WEBRTC REALTIME ONLINE PVP SUBSYSTEM
+    // ==========================================
+    initNetwork() {
+        const net = window.networkManager;
+        if (!net) return;
+
+        net.onConnected = ({ isHost, roomCode }) => {
+            this.isOnline = true;
+            this.isHost = isHost;
+            console.log(`[Game] Online Match Connected! Role: ${isHost ? 'HOST (Hero)' : 'GUEST (Shadow)'}, Room: ${roomCode}`);
+
+            // Close online lobby modal
+            const onlineModal = document.getElementById('online-modal');
+            if (onlineModal) onlineModal.style.display = 'none';
+
+            // Show floating announcement
+            const roleName = isHost ? "HERO (PLAYER 1)" : "SHADOW (PLAYER 2)";
+            this.showOnlineToast(`🌐 LAWAN TERHUBUNG! Karaktermu: ${roleName}`);
+
+            // Small delay for WebRTC handshake settling, then start match
+            this.scheduleTimeout(() => {
+                const selectArena = document.getElementById('select-arena');
+                const arena = selectArena ? selectArena.value : 'cyber';
+                this.switchArena(arena);
+                this.startMatch('ONLINE_PVP', 'normal');
+            }, 750);
+        };
+
+        net.onDisconnected = (reason) => {
+            if (this.isOnline) {
+                this.showOnlineToast(`⚠️ ${reason}`, true);
+                if (this.matchState === 'FIGHTING' || this.matchState === 'INTRO') {
+                    this.showBanner('DISCONNECTED', 2.0, () => {
+                        this.isOnline = false;
+                        location.reload();
+                    });
+                }
+            }
+            this.isOnline = false;
+        };
+
+        net.onPingUpdate = (ms) => {
+            if (this.onlineHudPing) {
+                this.onlineHudPing.textContent = `📶 ${ms}ms`;
+                this.onlineHudPing.className = ms < 60 ? 'ping-good' : (ms < 120 ? 'ping-med' : 'ping-bad');
+            }
+        };
+
+        net.onRemoteData = (data) => {
+            this.handleRemotePacket(data);
+        };
+    }
+
+    handleRemotePacket(data) {
+        if (!data) return;
+
+        // Continuous Movement state from remote player
+        if (data.type === 'MOVE') {
+            this.remoteKeys.left = Boolean(data.left);
+            this.remoteKeys.right = Boolean(data.right);
+            this.remoteKeys.block = Boolean(data.block);
+            return;
+        }
+
+        // Discrete combat action triggers
+        if (data.type === 'ACTION') {
+            const p = this.isHost ? this.player2 : this.player1;
+            const opp = this.isHost ? this.player1 : this.player2;
+            const dir = opp.position.x >= p.position.x ? 1 : -1;
+
+            if (data.act === 'PUNCH') {
+                p.setFacing(dir);
+                p.requestPunchCombo();
+            } else if (data.act === 'KICK') {
+                p.setFacing(dir);
+                p.requestKickCombo();
+            } else if (data.act === 'SPECIAL') {
+                p.setFacing(dir);
+                p.triggerAttack('SPECIAL');
+            } else if (data.act === 'DASH') {
+                p.setFacing(dir);
+                p.triggerDash(data.dir || dir);
+            } else if (data.act === 'JUMP') {
+                if (p.isGrounded && p.animState !== 'ATTACK') {
+                    p.setFacing(dir);
+                    p.triggerJump();
+                }
+            }
+            return;
+        }
+
+        // Periodic State Sync from Host (Guest applies it)
+        if (data.type === 'SYNC' && !this.isHost) {
+            this.applyHostSync(data);
+            return;
+        }
+
+        // Round events
+        if (data.type === 'ROUND_EVENT') {
+            if (data.event === 'START_ROUND' && !this.isHost) {
+                this.startRound(data.round);
+            } else if (data.event === 'ROUND_OVER' && !this.isHost) {
+                this.p1RoundWins = data.p1Wins;
+                this.p2RoundWins = data.p2Wins;
+                this.updateRoundIndicators();
+            } else if (data.event === 'REMATCH') {
+                this.startMatch('ONLINE_PVP', 'normal');
+            } else if (data.event === 'REQUEST_REMATCH' && this.isHost) {
+                this.showOnlineToast('Lawan meminta Rematch!');
+            }
+        }
+    }
+
+    updateNetworkHostSync(delta) {
+        this.networkSyncTimer = (this.networkSyncTimer || 0) + delta;
+        if (this.networkSyncTimer >= 1.2) {
+            this.networkSyncTimer = 0;
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({
+                    type: 'SYNC',
+                    p1Hp: Math.round(this.player1.health),
+                    p2Hp: Math.round(this.player2.health),
+                    p1Energy: Math.round(this.player1.energy),
+                    p2Energy: Math.round(this.player2.energy),
+                    timer: Math.ceil(this.roundTimer),
+                    round: this.currentRound,
+                    p1Wins: this.p1RoundWins,
+                    p2Wins: this.p2RoundWins,
+                    p1X: Number(this.player1.position.x.toFixed(2)),
+                    p2X: Number(this.player2.position.x.toFixed(2))
+                });
+            }
+        }
+    }
+
+    applyHostSync(data) {
+        if (!data) return;
+        this.player1.health = data.p1Hp;
+        this.player2.health = data.p2Hp;
+        this.player1.energy = data.p1Energy;
+        this.player2.energy = data.p2Energy;
+        this.roundTimer = data.timer;
+        this.currentRound = data.round;
+        this.p1RoundWins = data.p1Wins;
+        this.p2RoundWins = data.p2Wins;
+        this.updateRoundIndicators();
+
+        // Smooth position drift reconciliation (> 0.95 unit threshold)
+        if (Math.abs(this.player1.position.x - data.p1X) > 0.95) {
+            this.player1.position.x = data.p1X;
+            this.player1.root.position.x = data.p1X;
+        }
+        if (Math.abs(this.player2.position.x - data.p2X) > 0.95) {
+            this.player2.position.x = data.p2X;
+            this.player2.root.position.x = data.p2X;
+        }
+    }
+
+    showOnlineToast(msg, isWarn = false) {
+        this.showGamepadToast(msg, isWarn);
+    }
+
     showGamepadToast(message, isDisconnect = false) {
         if (!this.gamepadToastEl || !this.gamepadToastMsgEl) return;
         this.gamepadToastMsgEl.textContent = message;
@@ -155,7 +330,7 @@ class StickmanGame {
         clearTimeout(this.gamepadToastTimer);
         this.gamepadToastTimer = setTimeout(() => {
             if (this.gamepadToastEl) this.gamepadToastEl.classList.remove('show');
-        }, 3000);
+        }, 3200);
     }
 
     onGamepadConnected(gp) {
@@ -244,21 +419,6 @@ class StickmanGame {
         const justStickLeft = stickLeft && !prevAxes.stickLeft;
         const justStickRight = stickRight && !prevAxes.stickRight;
 
-        // Standard Button Mapping (W3C Standard Gamepad / Xbox / PlayStation)
-        // 0: A (Cross) - Jump
-        // 1: B (Circle) - Special Ki Blast
-        // 2: X (Square) - Punch Combo
-        // 3: Y (Triangle) - Kick Combo
-        // 4: LB (L1) - Guard / Block
-        // 5: RB (R1) - Dash
-        // 6: LT (L2) - Guard / Special
-        // 7: RT (R2) - Dash
-        // 8: Back / Select
-        // 9: Start / Options / Menu
-        // 12: D-Pad Up (Jump)
-        // 13: D-Pad Down (Block)
-        // 14: D-Pad Left
-        // 15: D-Pad Right
         const left = isDown(14) || stickLeft;
         const right = isDown(15) || stickRight;
         const jump = justPressed(0) || justPressed(12) || justStickUp;
@@ -317,11 +477,10 @@ class StickmanGame {
             }
         } else if (this.matchState === 'MATCH_OVER') {
             if (input.confirm) {
-                const btn = document.getElementById('btn-rematch');
-                if (btn) btn.click();
+                this.triggerRematch();
             }
         } else if (this.matchState === 'FIGHTING') {
-            if (input.start) {
+            if (input.start && this.gameMode !== 'ONLINE_PVP') {
                 this.togglePause();
             }
         }
@@ -347,14 +506,12 @@ class StickmanGame {
                 btn.classList.add('touch-active');
                 window.soundEngine.init();
 
-                // Physical vibration feedback on mobile phone
                 if (navigator.vibrate) {
                     try { navigator.vibrate(22); } catch (_) {}
                 }
 
                 onDown();
 
-                // Auto reset discrete tap actions after short trigger
                 if (isTapAction) {
                     clearTimeout(autoReleaseTimer);
                     autoReleaseTimer = setTimeout(() => {
@@ -381,7 +538,6 @@ class StickmanGame {
                 }
             });
 
-            // Prevent context menu on long tap
             btn.addEventListener('contextmenu', (e) => e.preventDefault());
         };
 
@@ -459,7 +615,31 @@ class StickmanGame {
             }
         }
 
-        this.p2NameLabel.textContent = (mode === 'VERSUS_2P') ? "PLAYER 2" : "SHADOW";
+        // Configure UI for Online vs Local modes
+        if (mode === 'ONLINE_PVP') {
+            this.isOnline = true;
+            this.isHost = window.networkManager ? window.networkManager.isHost : true;
+
+            if (this.onlineHudPill) {
+                this.onlineHudPill.style.display = 'flex';
+                if (this.onlineHudRole) {
+                    this.onlineHudRole.textContent = this.isHost ? 'P1 (HOST)' : 'P2 (GUEST)';
+                }
+                if (this.onlineHudRoom && window.networkManager) {
+                    this.onlineHudRoom.textContent = `ROOM: ${window.networkManager.roomCode || 'ONLINE'}`;
+                }
+            }
+
+            this.p1NameLabel.textContent = this.isHost ? "HERO (YOU)" : "HERO";
+            this.p2NameLabel.textContent = this.isHost ? "SHADOW" : "SHADOW (YOU)";
+        } else {
+            this.isOnline = false;
+            if (this.onlineHudPill) {
+                this.onlineHudPill.style.display = 'none';
+            }
+            this.p1NameLabel.textContent = "HERO";
+            this.p2NameLabel.textContent = (mode === 'VERSUS_2P') ? "PLAYER 2" : "SHADOW";
+        }
 
         this.updateRoundIndicators();
         this.startRound(this.currentRound);
@@ -480,6 +660,15 @@ class StickmanGame {
         this.player1.reset(-4.0, 1, isSurvivalNextWave);
         this.player2.reset(4.0, -1, false);
         this.vfx.clear();
+
+        // Broadcast round start if host
+        if (this.gameMode === 'ONLINE_PVP' && this.isHost && window.networkManager) {
+            window.networkManager.send({
+                type: 'ROUND_EVENT',
+                event: 'START_ROUND',
+                round: roundNumber
+            });
+        }
 
         let roundText = `ROUND ${roundNumber}`;
         if (roundNumber === 3 && this.gameMode !== 'SURVIVAL') roundText = "FINAL ROUND";
@@ -510,7 +699,7 @@ class StickmanGame {
     animate() {
         requestAnimationFrame(this.animate);
 
-        // Poll Gamepad inputs every frame (continuous axes + edge-triggered buttons)
+        // Poll Gamepad inputs every frame
         this.pollGamepadState();
 
         let delta = this.clock.getDelta();
@@ -545,11 +734,21 @@ class StickmanGame {
         // Update Match Logic
         if (this.matchState === 'FIGHTING') {
             this.updateRoundTimer(delta);
-            this.handlePlayer1Input(this.player1, this.player2, effectiveDelta);
 
-            if (this.gameMode === 'VERSUS_2P') {
+            if (this.gameMode === 'ONLINE_PVP') {
+                if (this.isHost) {
+                    this.handleLocalFightingInput(this.player1, this.player2, effectiveDelta, true);
+                    this.handleRemoteFightingInput(this.player2, this.player1, effectiveDelta);
+                    this.updateNetworkHostSync(delta);
+                } else {
+                    this.handleRemoteFightingInput(this.player1, this.player2, effectiveDelta);
+                    this.handleLocalFightingInput(this.player2, this.player1, effectiveDelta, false);
+                }
+            } else if (this.gameMode === 'VERSUS_2P') {
+                this.handlePlayer1Input(this.player1, this.player2, effectiveDelta);
                 this.handlePlayer2Input(this.player2, this.player1, effectiveDelta);
             } else {
+                this.handlePlayer1Input(this.player1, this.player2, effectiveDelta);
                 this.ai.update(effectiveDelta);
             }
         }
@@ -591,7 +790,6 @@ class StickmanGame {
         const p2 = this.player2;
 
         if (p1.animState === 'KO' || p2.animState === 'KO') return;
-        // Allow dashing or jumping past opponent if airborne
         if (Math.abs(p1.position.y - p2.position.y) > 1.1) return;
 
         const minSep = 0.88;
@@ -624,7 +822,178 @@ class StickmanGame {
         this.camera.lookAt(midX * 0.9, targetY - 0.55, 0);
     }
 
-    // Player 1 Input Handler (Keyboard + Touch + Gamepad 1)
+    // ==========================================
+    // LOCAL & REMOTE INPUT ROUTING
+    // ==========================================
+
+    // Online PvP: Handles local player input (Host controls P1, Guest controls P2)
+    handleLocalFightingInput(p, opponent, delta, isP1) {
+        const st = p.animState;
+        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
+
+        const pad = this.pad1Input || this.pad2Input;
+
+        const leftKey = this.keys['KeyA'] || this.keys['ArrowLeft'] || (pad && pad.left);
+        const rightKey = this.keys['KeyD'] || this.keys['ArrowRight'] || (pad && pad.right);
+        const jumpKey = this.keys['KeyW'] || this.keys['Space'] || this.keys['ArrowUp'] || (pad && pad.jump);
+        const blockKey = this.keys['KeyI'] || this.keys['KeyE'] || this.keys['KeyS'] || (pad && pad.block);
+
+        const punchKey = this.keys['KeyJ'] || (pad && pad.punch);
+        const kickKey = this.keys['KeyK'] || (pad && pad.kick);
+        const dashKey = this.keys['KeyL'] || this.keys['ShiftLeft'] || (pad && pad.dash);
+        const specialKey = this.keys['KeyU'] || this.keys['KeyQ'] || (pad && pad.special);
+
+        const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
+
+        // Detect continuous movement state change and transmit to peer
+        const curMove = {
+            left: Boolean(leftKey),
+            right: Boolean(rightKey),
+            block: Boolean(blockKey)
+        };
+
+        if (this.lastSentMove.left !== curMove.left ||
+            this.lastSentMove.right !== curMove.right ||
+            this.lastSentMove.block !== curMove.block) {
+            this.lastSentMove = curMove;
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({
+                    type: 'MOVE',
+                    left: curMove.left,
+                    right: curMove.right,
+                    block: curMove.block
+                });
+            }
+        }
+
+        // Guard / Block
+        if (blockKey && st !== 'ATTACK' && st !== 'DASH') {
+            p.setFacing(dirToOpponent);
+            p.setBlock(true);
+            p.moveDir = 0;
+            return;
+        } else {
+            p.setBlock(false);
+        }
+
+        // Special Ki Blast
+        if (specialKey) {
+            this.keys['KeyU'] = false;
+            this.keys['KeyQ'] = false;
+            if (pad) pad.special = false;
+            p.setFacing(dirToOpponent);
+            p.triggerAttack('SPECIAL');
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'SPECIAL' });
+            }
+            return;
+        }
+
+        // Shadow Dash
+        if (dashKey) {
+            this.keys['KeyL'] = false;
+            this.keys['ShiftLeft'] = false;
+            if (pad) pad.dash = false;
+            const dashDir = leftKey ? -1 : (rightKey ? 1 : dirToOpponent);
+            p.setFacing(dirToOpponent);
+            p.triggerDash(dashDir);
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'DASH', dir: dashDir });
+            }
+            return;
+        }
+
+        // 3-Hit Punch Combo
+        if (punchKey) {
+            this.keys['KeyJ'] = false;
+            if (pad) pad.punch = false;
+            p.setFacing(dirToOpponent);
+            p.requestPunchCombo();
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'PUNCH' });
+            }
+            return;
+        }
+
+        // 3-Hit Kick Combo
+        if (kickKey) {
+            this.keys['KeyK'] = false;
+            if (pad) pad.kick = false;
+            p.setFacing(dirToOpponent);
+            p.requestKickCombo();
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'KICK' });
+            }
+            return;
+        }
+
+        // Jump
+        if (jumpKey && p.isGrounded && st !== 'ATTACK') {
+            if (pad) pad.jump = false;
+            p.setFacing(dirToOpponent);
+            p.triggerJump();
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'JUMP' });
+            }
+            return;
+        }
+
+        // Horizontal Movement
+        if (st !== 'ATTACK' && st !== 'DASH') {
+            p.setFacing(dirToOpponent);
+            if (leftKey) {
+                p.position.x -= p.walkSpeed * delta;
+                p.moveDir = -1;
+                if (p.isGrounded) p.animState = 'RUN';
+            } else if (rightKey) {
+                p.position.x += p.walkSpeed * delta;
+                p.moveDir = 1;
+                if (p.isGrounded) p.animState = 'RUN';
+            } else {
+                p.moveDir = 0;
+                if (p.isGrounded) p.animState = 'IDLE';
+            }
+        }
+    }
+
+    // Online PvP: Applies received remote input to the remote fighter
+    handleRemoteFightingInput(p, opponent, delta) {
+        const st = p.animState;
+        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
+
+        const leftKey = Boolean(this.remoteKeys.left);
+        const rightKey = Boolean(this.remoteKeys.right);
+        const blockKey = Boolean(this.remoteKeys.block);
+
+        const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
+
+        if (blockKey && st !== 'ATTACK' && st !== 'DASH') {
+            p.setFacing(dirToOpponent);
+            p.setBlock(true);
+            p.moveDir = 0;
+            return;
+        } else {
+            p.setBlock(false);
+        }
+
+        if (st !== 'ATTACK' && st !== 'DASH') {
+            p.setFacing(dirToOpponent);
+            if (leftKey) {
+                p.position.x -= p.walkSpeed * delta;
+                p.moveDir = -1;
+                if (p.isGrounded) p.animState = 'RUN';
+            } else if (rightKey) {
+                p.position.x += p.walkSpeed * delta;
+                p.moveDir = 1;
+                if (p.isGrounded) p.animState = 'RUN';
+            } else {
+                p.moveDir = 0;
+                if (p.isGrounded) p.animState = 'IDLE';
+            }
+        }
+    }
+
+    // Player 1 Local Offline Input Handler
     handlePlayer1Input(p, opponent, delta) {
         const st = p.animState;
         if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
@@ -664,7 +1033,7 @@ class StickmanGame {
             return;
         }
 
-        // Shadow Dash (Dash in pressed direction, or toward opponent if neutral)
+        // Shadow Dash
         if (dashKey) {
             this.keys['KeyL'] = false;
             this.keys['ShiftLeft'] = false;
@@ -675,7 +1044,7 @@ class StickmanGame {
             return;
         }
 
-        // 3-Hit Punch Combo (1: Left Jab -> 2: Right Cross -> 3: Electric Uppercut)
+        // 3-Hit Punch Combo
         if (punchKey) {
             this.keys['KeyJ'] = false;
             if (pad) pad.punch = false;
@@ -684,7 +1053,7 @@ class StickmanGame {
             return;
         }
 
-        // 3-Hit Kick Combo (1: Left High Kick -> 2: Right Heavy Kick -> 3: 360 Tornado Kick, or Air Divekick)
+        // 3-Hit Kick Combo
         if (kickKey) {
             this.keys['KeyK'] = false;
             if (pad) pad.kick = false;
@@ -719,7 +1088,7 @@ class StickmanGame {
         }
     }
 
-    // Player 2 Input Handler (Local 2-Player Versus Mode: Keyboard / Gamepad 2)
+    // Player 2 Local Offline Input Handler (2P Versus)
     handlePlayer2Input(p, opponent, delta) {
         const st = p.animState;
         if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
@@ -883,7 +1252,6 @@ class StickmanGame {
             const distChest = strikePos.distanceTo(victimChest);
             const distHead = strikePos.distanceTo(victimHead);
 
-            // Also check horizontal fighting box (prevents point-blank whiffs)
             const signedDx = (victim.position.x - attacker.position.x) * attacker.facing;
             const dy = Math.abs(victim.position.y - attacker.position.y);
             const inStrikeBox = (signedDx >= -0.15 && signedDx <= maxReachX && dy < 1.25);
@@ -893,10 +1261,7 @@ class StickmanGame {
 
                 const didHit = victim.takeDamage(dmg, knockX, knockY, isHeavy, attacker);
                 if (didHit) {
-                    // Hitstop micro-freeze for impact feel
                     this.hitstopTimer = isHeavy ? 0.065 : 0.038;
-
-                    // Attacker gains Ki energy
                     attacker.energy = Math.min(attacker.maxEnergy, attacker.energy + 12);
 
                     // Gamepad Haptic Vibration Feedback
@@ -909,7 +1274,6 @@ class StickmanGame {
                         this.triggerGamepadRumble(victimIndex, 80, 0.3, 0.5);
                     }
 
-                    // Update combo counter
                     if (isP1Attacking) {
                         this.p1Combo++;
                         this.p1ComboTimer = 2.0;
@@ -941,7 +1305,6 @@ class StickmanGame {
                 this.vfx.spawnHitSparks(p.group.position, p.colorHex, 24, 1.8);
                 this.vfx.triggerShake(0.55);
 
-                // Gamepad explosion rumble
                 this.triggerGamepadRumble(0, 220, 0.7, 1.0);
                 this.triggerGamepadRumble(1, 220, 0.7, 1.0);
 
@@ -969,11 +1332,27 @@ class StickmanGame {
                 this.player2.animTime = 0;
             }
 
+            // In Online PvP, Host notifies Guest of round results
+            if (this.gameMode === 'ONLINE_PVP' && this.isHost && window.networkManager) {
+                window.networkManager.send({
+                    type: 'ROUND_EVENT',
+                    event: 'ROUND_OVER',
+                    p1Wins: this.p1RoundWins,
+                    p2Wins: this.p2RoundWins,
+                    winner: winner === this.player1 ? 'P1' : (winner === this.player2 ? 'P2' : 'DRAW')
+                });
+            }
+
             this.updateRoundIndicators();
 
             this.scheduleTimeout(() => {
-                const p2Label = (this.gameMode === 'VERSUS_2P') ? "PLAYER 2" : "SHADOW";
-                const koText = winner ? (winner === this.player1 ? "HERO WINS!" : `${p2Label} WINS!`) : "DRAW!";
+                let koText = "DRAW!";
+                if (winner === this.player1) {
+                    koText = (this.gameMode === 'ONLINE_PVP') ? (this.isHost ? "KAMU MENANG (P1)!" : "HERO (P1) WINS!") : "HERO WINS!";
+                } else if (winner === this.player2) {
+                    koText = (this.gameMode === 'ONLINE_PVP') ? (!this.isHost ? "KAMU MENANG (P2)!" : "SHADOW (P2) WINS!") : ((this.gameMode === 'VERSUS_2P') ? "PLAYER 2 WINS!" : "SHADOW WINS!");
+                }
+
                 this.showBanner(koText, 1.7, () => {
                     if (this.gameMode === 'SURVIVAL' && winner === this.player1) {
                         this.survivalWave++;
@@ -1006,6 +1385,21 @@ class StickmanGame {
             title.textContent = "SURVIVAL OVER";
             title.style.color = "#ffe600";
             sub.textContent = `Waves Cleared: ${this.survivalWave - 1} | Score: ${this.survivalScore}`;
+        } else if (this.gameMode === 'ONLINE_PVP') {
+            const isLocalWinner = (winner === this.player1 && this.isHost) || (winner === this.player2 && !this.isHost);
+            if (isLocalWinner) {
+                title.textContent = "VICTORY!";
+                title.style.color = "#00f0ff";
+                sub.textContent = "KAMU MEMENANGKAN DUEL ONLINE INI!";
+            } else if (!winner) {
+                title.textContent = "DRAW!";
+                title.style.color = "#ffe600";
+                sub.textContent = "PERTANDINGAN BERAKHIR SERI!";
+            } else {
+                title.textContent = "DEFEAT!";
+                title.style.color = "#ff2244";
+                sub.textContent = "LAWANMEMENANGKAN DUEL ONLINE INI!";
+            }
         } else if (winner === this.player1) {
             title.textContent = "VICTORY!";
             title.style.color = "#00f0ff";
@@ -1014,6 +1408,22 @@ class StickmanGame {
             title.textContent = (this.gameMode === 'VERSUS_2P') ? "PLAYER 2 WINS!" : "DEFEAT";
             title.style.color = "#ff2244";
             sub.textContent = (this.gameMode === 'VERSUS_2P') ? "SHADOW CHAMPION!" : "SHADOW PREVAILS!";
+        }
+    }
+
+    triggerRematch() {
+        if (this.gameMode === 'ONLINE_PVP') {
+            if (window.networkManager && window.networkManager.isConnected) {
+                if (this.isHost) {
+                    window.networkManager.send({ type: 'ROUND_EVENT', event: 'REMATCH' });
+                    this.startMatch('ONLINE_PVP', 'normal');
+                } else {
+                    window.networkManager.send({ type: 'ROUND_EVENT', event: 'REQUEST_REMATCH' });
+                    this.showOnlineToast('Meminta Host untuk Rematch...');
+                }
+            }
+        } else {
+            this.startMatch(this.gameMode, this.difficulty);
         }
     }
 
@@ -1082,6 +1492,11 @@ class StickmanGame {
     }
 
     togglePause() {
+        if (this.gameMode === 'ONLINE_PVP') {
+            this.showOnlineToast('Game online tidak bisa dijeda!');
+            return;
+        }
+
         if (this.matchState === 'FIGHTING') {
             this.matchState = 'PAUSED';
             document.getElementById('pause-modal').style.display = 'flex';
