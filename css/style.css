@@ -365,12 +365,33 @@ body, html {
 /* Right Thumb Action Attack Cluster */
 .touch-action-cluster {
     align-items: flex-end;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.touch-actions-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 60px);
-    gap: 10px;
+.touch-action-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.touch-action-bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.touch-action-top-row .touch-btn {
+    width: 52px;
+    height: 52px;
+}
+
+.touch-action-bottom-row .touch-btn {
+    width: 62px;
+    height: 62px;
 }
 
 /* Universal Arcade Touch Button Base */
@@ -955,12 +976,16 @@ body, html {
         height: 52px;
     }
     .touch-btn.btn-dir-dash {
+        width: 48px;
+        height: 48px;
+    }
+    .touch-action-top-row .touch-btn {
         width: 46px;
         height: 46px;
     }
-    .touch-actions-grid {
-        grid-template-columns: repeat(2, 54px);
-        gap: 8px;
+    .touch-action-bottom-row .touch-btn {
+        width: 54px;
+        height: 54px;
     }
     .combo-display {
         top: 90px;
@@ -989,9 +1014,13 @@ body, html {
     .touch-lbl {
         font-size: 7px;
     }
-    .touch-actions-grid {
-        grid-template-columns: repeat(2, 48px);
-        gap: 6px;
+    .touch-action-top-row .touch-btn {
+        width: 42px;
+        height: 42px;
+    }
+    .touch-action-bottom-row .touch-btn {
+        width: 48px;
+        height: 48px;
     }
     .touch-h-row {
         gap: 6px;

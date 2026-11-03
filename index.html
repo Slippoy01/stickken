@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stickman Shadow Showdown 3D | Three.js Fighting Game</title>
-    <link rel="stylesheet" href="css/style.css?v=4">
+    <link rel="stylesheet" href="css/style.css?v=5">
     <!-- Local Three.js with CDN fallback -->
     <script src="js/three.min.js"></script>
     <script>
@@ -102,7 +102,7 @@
 
     <!-- Touch / Mobile Controls (Arcade Dual-Thumb Layout) -->
     <div id="touch-controls" style="display: none;">
-        <!-- Left Thumb: Movement & Dash -->
+        <!-- Left Thumb: Movement Only (D-Pad) -->
         <div class="touch-cluster touch-movement-cluster">
             <div class="touch-dpad-grid">
                 <button id="touch-jump" class="touch-btn btn-dir-up" title="Jump (Lompat)">
@@ -114,10 +114,6 @@
                         <span class="touch-icon">◀</span>
                         <span class="touch-lbl">KIRI</span>
                     </button>
-                    <button id="touch-dash-l" class="touch-btn btn-dir-dash" title="Shadow Dash (Menghindar)">
-                        <span class="touch-icon">💨</span>
-                        <span class="touch-lbl">DASH</span>
-                    </button>
                     <button id="touch-right" class="touch-btn btn-dir-right" title="Move Right (Kanan)">
                         <span class="touch-icon">▶</span>
                         <span class="touch-lbl">KANAN</span>
@@ -126,9 +122,13 @@
             </div>
         </div>
 
-        <!-- Right Thumb: Combat Action Attacks -->
+        <!-- Right Thumb: Combat Action Attacks & Dash -->
         <div class="touch-cluster touch-action-cluster">
-            <div class="touch-actions-grid">
+            <div class="touch-action-top-row">
+                <button id="touch-dash-r" class="touch-btn btn-dir-dash" title="Shadow Dash (Menghindar)">
+                    <span class="touch-icon">💨</span>
+                    <span class="touch-lbl">DASH</span>
+                </button>
                 <button id="touch-block" class="touch-btn btn-guard" title="Guard / Tangkis">
                     <span class="touch-icon">🛡️</span>
                     <span class="touch-lbl">GUARD</span>
@@ -137,6 +137,8 @@
                     <span class="touch-icon">⚡</span>
                     <span class="touch-lbl">KI BLAST</span>
                 </button>
+            </div>
+            <div class="touch-action-bottom-row">
                 <button id="touch-punch" class="touch-btn btn-punch" title="Punch Combo (Pukulan)">
                     <span class="touch-icon">🥊</span>
                     <span class="touch-lbl">TINJU</span>
@@ -398,13 +400,13 @@
     </div>
 
     <!-- Game Scripts (Modular & Clean) -->
-    <script src="js/audio.js?v=4"></script>
-    <script src="js/vfx.js?v=4"></script>
-    <script src="js/stickman.js?v=4"></script>
-    <script src="js/arena.js?v=4"></script>
-    <script src="js/ai.js?v=4"></script>
-    <script src="js/network.js?v=4"></script>
-    <script src="js/game.js?v=4"></script>
+    <script src="js/audio.js?v=5"></script>
+    <script src="js/vfx.js?v=5"></script>
+    <script src="js/stickman.js?v=5"></script>
+    <script src="js/arena.js?v=5"></script>
+    <script src="js/ai.js?v=5"></script>
+    <script src="js/network.js?v=5"></script>
+    <script src="js/game.js?v=5"></script>
 
     <!-- UI Event Wiring -->
     <script>

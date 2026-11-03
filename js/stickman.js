@@ -643,27 +643,28 @@ class Stickman {
         this.rightLeg.knee.rotation.set(lerp(poseA.rKnee, poseB.rKnee, t), 0, 0);
     }
 
-    // Tekken 3-Phase Attack Curve:
-    // 0.00 -> 0.20: Guard to Chamber (Coil)
-    // 0.20 -> 0.40: Explosive Snap from Chamber to Full Strike Extension
-    // 0.40 -> 0.62: Impact Hold (Crisp Silhouette Lock!)
-    // 0.62 -> 1.00: Smooth Return to Fighting Guard
+    // Fluid Martial Arts Attack Choreography Curve:
+    // 0.00 -> 0.18: Chamber & Coil (Anticipation)
+    // 0.18 -> 0.38: Explosive Kinetic Snap into Peak Extension
+    // 0.38 -> 0.60: Dynamic Impact Window (Alive muscle tension & micro-followthrough, no stiff freeze)
+    // 0.60 -> 1.00: Elastic Return to Guard
     applyThreePhaseStrike(p, chamberPose, strikePose) {
-        if (p < 0.20) {
-            const f = p / 0.20;
-            const ease = f * f;
+        if (p < 0.18) {
+            const f = p / 0.18;
+            const ease = f * f * (3 - 2 * f); // Smoothstep anticipation
             this.applyBlendedPose(this.GUARD_POSE, chamberPose, ease);
-        } else if (p < 0.40) {
-            const f = (p - 0.20) / 0.20;
-            // Fast explosive snap (quartic ease-out)
-            const snap = 1 - Math.pow(1 - f, 4);
+        } else if (p < 0.38) {
+            const f = (p - 0.18) / 0.20;
+            const snap = 1 - Math.pow(1 - f, 3); // Explosive cubic ease-out
             this.applyBlendedPose(chamberPose, strikePose, snap);
-        } else if (p < 0.62) {
-            // Hold peak extension with subtle breathing tension
+        } else if (p < 0.60) {
+            const f = (p - 0.38) / 0.22;
+            const microFollow = Math.sin(f * Math.PI) * 0.035;
             this.applyBlendedPose(strikePose, strikePose, 1.0);
+            this.spine.rotation.x += microFollow;
         } else {
-            const f = (p - 0.62) / 0.38;
-            const ease = f * (2 - f);
+            const f = (p - 0.60) / 0.40;
+            const ease = f * f * (3 - 2 * f);
             this.applyBlendedPose(strikePose, this.GUARD_POSE, ease);
         }
     }
@@ -1002,33 +1003,34 @@ class Stickman {
             // 3-HIT PUNCH COMBO: 1. Left Jab -> 2. Right Cross -> 3. Electric Uppercut
             // =========================================================================
             case 'PUNCH_1': {
+                // 1. Left Snapping Jab (Crisp Boxing Lead Jab with correct kinetic chain)
                 const chamber = {
                     hipsY: 0.88,
-                    hips: [0, -0.35, 0],
-                    spine: [0.06, -0.15, 0],
-                    neck: [-0.04, 0.15, 0],
-                    lShoulder: [-0.45, 0.25, 0.25],
-                    lElbow: -2.05, // tightly chambered at left cheek/rib
-                    rShoulder: [-0.65, -0.25, -0.20],
+                    hips: [0, 0.12, 0],
+                    spine: [0.06, 0.16, 0],
+                    neck: [-0.04, -0.14, 0],
+                    lShoulder: [-0.65, 0.18, 0.20],
+                    lElbow: -1.95, // tight boxer guard chamber at cheek
+                    rShoulder: [-0.60, -0.22, -0.22],
                     rElbow: -1.85,
-                    lHip: [-0.42, 0.1, 0.08],
-                    lKnee: 0.62,
-                    rHip: [0.28, -0.1, -0.08],
-                    rKnee: 0.35
+                    lHip: [-0.38, 0.10, 0.08],
+                    lKnee: 0.58,
+                    rHip: [0.26, -0.10, -0.08],
+                    rKnee: 0.38
                 };
                 const strike = {
-                    hipsY: 0.85,
-                    hips: [0, 0.22, 0],
-                    spine: [0.20, 0.65, 0], // left shoulder whips forward!
-                    neck: [-0.14, -0.55, 0], // eyes stay locked forward!
-                    lShoulder: [-1.58, -0.20, 0.0], // straight horizontal jab extension!
-                    lElbow: -0.04, // elbow snaps straight!
-                    rShoulder: [-0.55, -0.30, -0.25], // right hand guards jaw
-                    rElbow: -1.95,
-                    lHip: [-0.65, 0.1, 0.08],
-                    lKnee: 0.82,
-                    rHip: [0.45, -0.1, -0.08],
-                    rKnee: 0.22
+                    hipsY: 0.86,
+                    hips: [0, -0.22, 0], // hips rotate left side forward!
+                    spine: [0.12, -0.38, 0], // torso drives left shoulder toward opponent!
+                    neck: [-0.08, 0.35, 0], // eyes locked dead-center on target!
+                    lShoulder: [-1.56, -0.10, 0.0], // razor-sharp horizontal jab extension!
+                    lElbow: -0.04, // snappy elbow lock!
+                    rShoulder: [-0.65, -0.25, -0.20], // right fist tightly protects jaw
+                    rElbow: -1.90,
+                    lHip: [-0.52, 0.10, 0.08],
+                    lKnee: 0.72,
+                    rHip: [0.38, -0.10, -0.08],
+                    rKnee: 0.26
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
                 if (this.attackPhase === 1 && this.trailTimer >= 0.025) {
@@ -1039,33 +1041,34 @@ class Stickman {
             }
 
             case 'PUNCH_2': {
+                // 2. Right Power Cross (Rear Straight Right driven from hip pivot)
                 const chamber = {
                     hipsY: 0.86,
-                    hips: [0, 0.38, 0],
-                    spine: [0.10, 0.52, 0],
-                    neck: [-0.06, -0.45, 0],
-                    lShoulder: [-1.15, 0, 0.15], // lead hand retracting from jab
-                    lElbow: -0.75,
-                    rShoulder: [0.22, -0.30, -0.35], // right fist cocked way back!
+                    hips: [0, -0.22, 0],
+                    spine: [0.08, -0.28, 0],
+                    neck: [-0.05, 0.25, 0],
+                    lShoulder: [-1.05, 0.08, 0.12], // lead arm retracts from jab
+                    lElbow: -1.00,
+                    rShoulder: [0.18, -0.22, -0.28], // right fist loaded deep near ribs/jaw!
                     rElbow: -2.05,
-                    lHip: [-0.55, 0.1, 0.08],
-                    lKnee: 0.72,
-                    rHip: [0.35, -0.1, -0.08],
-                    rKnee: 0.45
+                    lHip: [-0.42, 0, 0.08],
+                    lKnee: 0.62,
+                    rHip: [0.28, 0, -0.08],
+                    rKnee: 0.42
                 };
                 const strike = {
-                    hipsY: 0.82,
-                    hips: [0, -0.45, 0], // deep hip pivot!
-                    spine: [0.28, -0.78, 0], // right shoulder drives through target!
-                    neck: [-0.18, 0.68, 0],
-                    lShoulder: [-0.55, 0.28, 0.28], // left hand tucked to cheek guard
+                    hipsY: 0.83,
+                    hips: [0, 0.45, 0], // powerful forward hip drive on right side!
+                    spine: [0.22, 0.58, 0], // right shoulder launches forward through target!
+                    neck: [-0.14, -0.52, 0], // chin tucked, eyes on target!
+                    lShoulder: [-0.60, 0.25, 0.22], // left glove guards cheek
                     lElbow: -1.95,
-                    rShoulder: [-1.62, 0.22, 0.0], // full power right cross extension!
+                    rShoulder: [-1.60, 0.12, 0.0], // full-extension power punch!
                     rElbow: -0.04,
-                    lHip: [-0.75, 0, 0.08],
-                    lKnee: 0.95,
-                    rHip: [0.58, 0, -0.08],
-                    rKnee: 0.18
+                    lHip: [-0.65, 0, 0.08],
+                    lKnee: 0.88,
+                    rHip: [0.50, 0, -0.08], // rear leg drives & pivots
+                    rKnee: 0.20
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
                 if (this.attackPhase === 1 && this.trailTimer >= 0.022) {
@@ -1076,34 +1079,34 @@ class Stickman {
             }
 
             case 'PUNCH_3': {
-                // Tekken Electric Wind God Fist (Crouch Wave-Dash -> Sky-Ripping Uppercut!)
+                // 3. Tekken Electric Dragon Uppercut (Low Crouch -> Skyward Launch!)
                 const chamber = {
-                    hipsY: 0.68, // deep Mishima crouch!
-                    hips: [0.15, 0.45, 0],
-                    spine: [0.45, 0.65, 0], // torso coiled low & forward
-                    neck: [-0.35, -0.55, 0],
-                    lShoulder: [-0.35, 0.35, 0.40],
-                    lElbow: -1.45,
-                    rShoulder: [0.38, -0.25, -0.35], // right arm loaded low at hip!
-                    rElbow: -1.75,
-                    lHip: [-0.95, 0, 0.1],
-                    lKnee: 1.45,
-                    rHip: [0.35, 0, -0.1],
-                    rKnee: 1.15
+                    hipsY: 0.70, // low athletic crouch
+                    hips: [0.12, -0.28, 0],
+                    spine: [0.38, -0.42, 0], // torso coiled forward & low
+                    neck: [-0.25, 0.38, 0],
+                    lShoulder: [-0.45, 0.25, 0.30],
+                    lElbow: -1.55,
+                    rShoulder: [0.35, -0.20, -0.28], // right fist loaded low at waist
+                    rElbow: -1.80,
+                    lHip: [-0.85, 0, 0.10],
+                    lKnee: 1.35,
+                    rHip: [0.30, 0, -0.10],
+                    rKnee: 1.10
                 };
                 const strike = {
-                    hipsY: 1.06, // explosive upward rise!
-                    hips: [-0.12, -0.52, 0],
-                    spine: [-0.28, -0.78, 0], // chest arches skyward!
-                    neck: [0.15, 0.60, 0],
-                    lShoulder: [0.42, 0.2, 0.48], // left arm counter-pulled back
-                    lElbow: -1.55,
-                    rShoulder: [-2.35, 0.18, -0.08], // right fist rips high overhead!
-                    rElbow: -0.52, // classic bent-arm uppercut lock!
-                    lHip: [-0.22, 0, 0.08],
-                    lKnee: 0.30,
-                    rHip: [-0.88, 0, -0.08], // rising right knee drive!
-                    rKnee: 1.35
+                    hipsY: 1.05, // explosive upward launch!
+                    hips: [-0.15, 0.38, 0],
+                    spine: [-0.26, 0.52, 0], // chest arches skyward!
+                    neck: [0.15, -0.45, 0],
+                    lShoulder: [0.40, 0.15, 0.35], // left arm swings back for torque
+                    lElbow: -1.40,
+                    rShoulder: [-2.32, 0.15, -0.05], // fist arcs violently skyward!
+                    rElbow: -0.48, // classic bent-arm power hook lock!
+                    lHip: [-0.20, 0, 0.08],
+                    lKnee: 0.25,
+                    rHip: [-0.85, 0, -0.08], // rising right knee drive!
+                    rKnee: 1.30
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
                 if (this.attackPhase === 1 && this.trailTimer >= 0.018) {
@@ -1119,34 +1122,34 @@ class Stickman {
             // 3-HIT KICK COMBO: 1. Left High Kick -> 2. Right Heavy Kick -> 3. 360 Tornado Kick
             // =========================================================================
             case 'KICK_1': {
-                // 1. Left High Roundhouse Kick (Kaki Kiri)
+                // 1. Left Lead High Roundhouse Kick (Chambered high, hips rolled over)
                 const chamber = {
                     hipsY: 0.90,
-                    hips: [-0.10, -0.25, 0],
-                    spine: [-0.15, -0.20, 0],
-                    neck: [0.10, 0.20, 0],
-                    lShoulder: [-0.70, 0.2, 0.3],
+                    hips: [-0.08, 0.15, 0],
+                    spine: [-0.12, 0.12, 0],
+                    neck: [0.08, -0.12, 0],
+                    lShoulder: [-0.65, 0.15, 0.25],
                     lElbow: -1.65,
-                    rShoulder: [-0.70, -0.2, -0.3],
+                    rShoulder: [-0.65, -0.15, -0.25],
                     rElbow: -1.75,
-                    lHip: [-1.45, 0.25, 0.35], // left knee lifted high & chambered!
-                    lKnee: 1.68, // tightly folded knee before snap!
+                    lHip: [-1.40, -0.20, 0.25], // knee chambered high in front
+                    lKnee: 1.70, // folded shin ready to whip!
                     rHip: [0.05, 0, 0],
-                    rKnee: 0.25
+                    rKnee: 0.30
                 };
                 const strike = {
                     hipsY: 0.92,
-                    hips: [-0.28, 0.55, -0.18], // hips whip around & tilt!
-                    spine: [-0.34, 0.35, 0.12], // torso leans back to counterbalance high kick!
-                    neck: [0.22, -0.45, 0],
-                    lShoulder: [0.45, 0, 0.50], // left arm counter-swings
-                    lElbow: -0.85,
-                    rShoulder: [-0.95, 0.25, -0.20], // right hand guards face
+                    hips: [-0.25, -0.52, -0.15], // hips ROLL OVER (negative Y drives left hip forward!)
+                    spine: [-0.32, -0.30, 0.15], // torso leans back to counterbalance kick height
+                    neck: [0.20, 0.35, 0], // eyes locked on target!
+                    lShoulder: [0.45, 0, 0.45], // left arm swings down along kick path
+                    lElbow: -0.75,
+                    rShoulder: [-0.90, 0.20, -0.20], // right hand guards temple
                     rElbow: -1.65,
-                    lHip: [-1.64, -0.15, 0.24], // left leg extended high!
-                    lKnee: 0.04, // knee snaps razor-straight!
-                    rHip: [0.24, 0, -0.08],
-                    rKnee: 0.18
+                    lHip: [-1.65, 0.10, 0.22], // left leg whips out razor-straight at head height!
+                    lKnee: 0.04, // snappy knee lock!
+                    rHip: [0.25, 0, -0.08],
+                    rKnee: 0.20
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
                 if (this.attackPhase === 1 && this.trailTimer >= 0.022) {
@@ -1157,33 +1160,33 @@ class Stickman {
             }
 
             case 'KICK_2': {
-                // 2. Right Heavy Thrust/Roundhouse Kick (Kaki Kanan)
+                // 2. Right Heavy Roundhouse Thrust Kick (Full rear-hip roll and lean-back)
                 const chamber = {
                     hipsY: 0.90,
-                    hips: [-0.12, 0.35, 0],
-                    spine: [-0.18, 0.25, 0],
-                    neck: [0.12, -0.25, 0],
-                    lShoulder: [-0.80, -0.2, 0.25],
+                    hips: [-0.10, -0.25, 0],
+                    spine: [-0.15, -0.20, 0],
+                    neck: [0.10, 0.20, 0],
+                    lShoulder: [-0.75, -0.15, 0.25],
                     lElbow: -1.65,
-                    rShoulder: [-0.60, 0.2, -0.35],
+                    rShoulder: [-0.55, 0.15, -0.30],
                     rElbow: -1.55,
-                    lHip: [0.08, 0, 0], // left foot steps down as support pivot!
-                    lKnee: 0.25,
-                    rHip: [-1.52, -0.25, -0.35], // right knee chambers high!
-                    rKnee: 1.68
+                    lHip: [0.08, 0, 0],
+                    lKnee: 0.28,
+                    rHip: [-1.48, 0.22, -0.25], // right knee chambered high
+                    rKnee: 1.70
                 };
                 const strike = {
-                    hipsY: 0.93,
-                    hips: [-0.32, -0.65, 0.20], // full opposite hip whip!
-                    spine: [-0.38, -0.45, -0.15], // dramatic martial arts lean-back!
-                    neck: [0.25, 0.50, 0],
-                    lShoulder: [-0.95, -0.25, 0.20], // left hand guards chin
+                    hipsY: 0.92,
+                    hips: [-0.30, 0.60, 0.18], // hips ROLL OVER (positive Y drives right hip forward!)
+                    spine: [-0.36, 0.40, -0.15], // dramatic martial arts lean-back
+                    neck: [0.22, -0.45, 0], // eyes stay focused forward
+                    lShoulder: [-0.92, -0.20, 0.20], // left hand guards jaw
                     lElbow: -1.65,
-                    rShoulder: [0.55, 0, -0.50], // right arm counter-swings
-                    rElbow: -0.75,
+                    rShoulder: [0.50, 0, -0.45], // right arm counter-swings for maximum torque
+                    rElbow: -0.70,
                     lHip: [0.28, 0, 0.08],
-                    lKnee: 0.18,
-                    rHip: [-1.70, 0.18, -0.24], // right leg snaps razor-straight at head/chest height!
+                    lKnee: 0.20,
+                    rHip: [-1.72, -0.15, -0.22], // right leg snaps horizontal across chest/head level!
                     rKnee: 0.04
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
@@ -1195,33 +1198,33 @@ class Stickman {
             }
 
             case 'KICK_3': {
-                // 3. 360° Jumping Tornado Spin Kick Finisher! (Tendangan Berputar)
+                // 3. 360° Jumping Tornado Spin Kick Finisher (Acrobatic aerial rotation)
                 const chamber = {
                     hipsY: 1.05,
-                    hips: [-0.15, Math.PI * 0.85, 0], // mid-spin windup!
-                    spine: [-0.15, 0.25, 0],
-                    neck: [0.10, 0, 0],
-                    lShoulder: [-0.85, 0.3, 0.3],
+                    hips: [-0.15, -Math.PI * 0.85, 0], // spin windup
+                    spine: [-0.15, -0.25, 0],
+                    neck: [0.10, 0.20, 0],
+                    lShoulder: [-0.85, 0.25, 0.30],
                     lElbow: -1.65,
-                    rShoulder: [-0.85, -0.3, -0.3],
+                    rShoulder: [-0.85, -0.25, -0.30],
                     rElbow: -1.65,
-                    lHip: [-1.15, 0, 0.18], // left knee tucked in air!
-                    lKnee: 1.55,
-                    rHip: [-1.35, 0, -0.28], // right leg chambered mid-spin!
+                    lHip: [-1.10, 0, 0.18],
+                    lKnee: 1.50,
+                    rHip: [-1.30, 0, -0.25],
                     rKnee: 1.60
                 };
                 const strike = {
                     hipsY: 1.12,
-                    hips: [-0.36, Math.PI * 2.0 - 0.55, 0.22], // completes full 360° tornado rotation!
-                    spine: [-0.36, -0.45, -0.15],
-                    neck: [0.22, 0.45, 0],
-                    lShoulder: [-0.95, -0.2, 0.45],
+                    hips: [-0.34, -(Math.PI * 2.0 - 0.55), 0.20], // completes full 360° rotation!
+                    spine: [-0.34, 0.40, -0.15],
+                    neck: [0.22, -0.40, 0],
+                    lShoulder: [-0.95, -0.20, 0.45],
                     lElbow: -1.35,
-                    rShoulder: [0.65, 0, -0.58],
+                    rShoulder: [0.65, 0, -0.55],
                     rElbow: -0.55,
-                    lHip: [-0.80, 0, 0.20], // left leg tucked in air
-                    lKnee: 1.48,
-                    rHip: [-1.76, 0.18, -0.30], // right leg whips out 100% straight!
+                    lHip: [-0.78, 0, 0.20],
+                    lKnee: 1.45,
+                    rHip: [-1.76, -0.15, -0.28], // right leg whips out 100% straight horizontally!
                     rKnee: 0.02
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
@@ -1235,32 +1238,33 @@ class Stickman {
             }
 
             case 'AIR_KICK': {
+                // Flying Side Dive Kick (Aerodynamic martial arts kick)
                 const chamber = {
                     hipsY: 0.95,
-                    hips: [-0.20, 0, 0],
-                    spine: [-0.10, 0, 0],
-                    neck: [0.10, 0, 0],
-                    lShoulder: [-0.7, 0, 0.4],
-                    lElbow: -1.4,
-                    rShoulder: [-0.7, 0, -0.4],
-                    rElbow: -1.4,
-                    lHip: [-1.3, 0, 0],
-                    lKnee: 1.5,
-                    rHip: [-0.6, 0, 0],
-                    rKnee: 1.3
+                    hips: [-0.20, 0.15, 0],
+                    spine: [-0.10, 0.10, 0],
+                    neck: [0.10, -0.10, 0],
+                    lShoulder: [-0.70, 0.10, 0.35],
+                    lElbow: -1.40,
+                    rShoulder: [-0.70, -0.10, -0.35],
+                    rElbow: -1.40,
+                    lHip: [-1.30, -0.15, 0.10],
+                    lKnee: 1.50,
+                    rHip: [-0.60, 0, 0],
+                    rKnee: 1.30
                 };
                 const strike = {
                     hipsY: 0.92,
-                    hips: [-0.48, 0.35, 0],
-                    spine: [-0.25, 0.25, 0],
-                    neck: [0.25, -0.25, 0],
-                    lShoulder: [0.4, 0, 0.5],
-                    lElbow: -0.8,
-                    rShoulder: [-0.9, 0, -0.3],
-                    rElbow: -1.5,
-                    lHip: [-1.45, 0, 0.1], // flying side kick extension!
+                    hips: [-0.48, -0.35, 0], // hips roll forward into kick direction
+                    spine: [-0.25, -0.25, 0],
+                    neck: [0.25, 0.25, 0],
+                    lShoulder: [0.40, 0, 0.50],
+                    lElbow: -0.80,
+                    rShoulder: [-0.90, 0, -0.30],
+                    rElbow: -1.50,
+                    lHip: [-1.55, 0.05, 0.12], // flying side kick full extension!
                     lKnee: 0.04,
-                    rHip: [-0.55, 0, -0.1],
+                    rHip: [-0.55, 0, -0.10],
                     rKnee: 1.45
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
@@ -1270,7 +1274,6 @@ class Stickman {
                 }
                 break;
             }
-
             case 'SPECIAL': {
                 if (p < 0.45) {
                     const chargePose = {

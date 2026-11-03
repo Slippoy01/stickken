@@ -541,11 +541,12 @@ class StickmanGame {
             btn.addEventListener('contextmenu', (e) => e.preventDefault());
         };
 
-        // Left Thumb: Movement & Dash
+        // Left Thumb: Movement Only
         bindPointerBtn('touch-left', () => this.keys['KeyA'] = true, () => this.keys['KeyA'] = false);
         bindPointerBtn('touch-right', () => this.keys['KeyD'] = true, () => this.keys['KeyD'] = false);
         bindPointerBtn('touch-jump', () => this.keys['KeyW'] = true, () => this.keys['KeyW'] = false, true);
         bindPointerBtn('touch-dash-l', () => this.keys['KeyL'] = true, () => this.keys['KeyL'] = false, true);
+        bindPointerBtn('touch-dash-r', () => this.keys['KeyL'] = true, () => this.keys['KeyL'] = false, true);
         bindPointerBtn('touch-dash', () => this.keys['KeyL'] = true, () => this.keys['KeyL'] = false, true);
 
         // Right Thumb: Combat Action Attacks
