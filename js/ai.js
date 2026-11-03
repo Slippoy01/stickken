@@ -89,15 +89,15 @@ class FighterAI {
         const dist = Math.abs(this.fighter.position.x - this.target.position.x);
         const dirToTarget = this.target.position.x >= this.fighter.position.x ? 1 : -1;
         const targetIsAttacking = (this.target.animState === 'ATTACK' && this.target.attackPhase <= 1);
-        const targetIsDown = (this.target.animState === 'KNOCKDOWN' || this.target.animState === 'GETUP');
+        const targetIsDown = (this.target.animState === 'KNOCKDOWN' || this.target.animState === 'GETUP' || this.target.animState === 'THROWN');
 
         if (this.fighter.animState !== 'DASH') {
             this.fighter.setFacing(dirToTarget);
         }
 
-        // 0. If target is knocked down, back off slightly to respectful distance (~2.4 units)
+        // 0. If target is knocked down, back off slightly
         if (targetIsDown) {
-            this.fighter.setBlock(false);
+            this.fighter.setGuardAndCrouch(false, false);
             this.comboQueue = [];
             if (dist < 2.2) {
                 this.currentAction = dirToTarget > 0 ? 'MOVE_LEFT' : 'MOVE_RIGHT';
@@ -108,10 +108,12 @@ class FighterAI {
             return;
         }
 
-        // 1. DEFENSIVE REACTION: If player is attacking in close range
-        if (targetIsAttacking && dist < 2.4) {
+        // 1. DEFENSIVE REACTION (Kamen Rider Agito ✕ Guard: Stand Guard vs High, Duck Guard vs Low)
+        if (targetIsAttacking && dist < 2.5) {
             if (Math.random() < this.blockChance) {
-                this.fighter.setBlock(true);
+                const incomingHitLevel = Stickman.getAttackHitLevel(this.target.attackType);
+                const shouldDuckGuard = (incomingHitLevel === 'LOW');
+                this.fighter.setGuardAndCrouch(true, shouldDuckGuard);
                 this.currentAction = 'IDLE';
                 this.actionTimer = 0.30;
                 return;
@@ -119,13 +121,13 @@ class FighterAI {
                 this.fighter.triggerDash(-dirToTarget);
                 return;
             }
-        } else if (this.fighter.isBlocking && Math.random() < 0.85) {
-            this.fighter.setBlock(false);
+        } else if ((this.fighter.isBlocking || this.fighter.isCrouchBlocking) && Math.random() < 0.85) {
+            this.fighter.setGuardAndCrouch(false, false);
         }
 
-        // 2. LONG RANGE (dist > 6.5 units)
+        // 2. LONG RANGE (dist > 6.5 units): Energy Blast (○) or Dash in
         if (dist > 6.5) {
-            if (this.fighter.energy >= 40 && Math.random() < 0.55) {
+            if (this.fighter.energy >= 25 && Math.random() < 0.55) {
                 this.fighter.triggerAttack('SPECIAL');
                 return;
             }
@@ -139,18 +141,30 @@ class FighterAI {
             return;
         }
 
-        // 3. MID RANGE (2.0 <= dist <= 6.5 units)
+        // 3. MID RANGE (2.0 <= dist <= 6.5 units): Dash Strike (Dash + □), Sleding (⬇️ + □), or Air Rider Kick (Udara + ○)
         if (dist >= 2.0 && dist <= 6.5) {
             const roll = Math.random();
 
-            if (roll < 0.28 && this.fighter.isGrounded && dist < 4.5) {
+            if (roll < 0.26 && this.fighter.isGrounded && dist < 4.5) {
                 this.fighter.triggerJump();
                 setTimeout(() => {
                     if (this.fighter && this.fighter.animState === 'JUMP') {
-                        this.fighter.triggerAttack('AIR_KICK');
+                        if (this.fighter.energy >= 25 && Math.random() < 0.5) {
+                            this.fighter.triggerAttack('SPECIAL_DIVE', true);
+                        } else {
+                            this.fighter.triggerAttack('AIR_KICK', true);
+                        }
                     }
                 }, 150);
-            } else if (roll < 0.55 && this.fighter.dashCooldown <= 0 && dist > 3.0) {
+            } else if (roll < 0.52 && dist < 3.6 && this.fighter.isGrounded) {
+                // Sleding / Sliding Kick (⬇️ + □) or Dash Attack (Dash + □)
+                if (Math.random() < 0.5) {
+                    this.fighter.triggerAttack('SLIDE_KICK', true);
+                } else {
+                    this.fighter.triggerDash(dirToTarget);
+                    this.comboQueue = ['DASH_STRIKE'];
+                }
+            } else if (roll < 0.72 && this.fighter.dashCooldown <= 0 && dist > 3.0) {
                 this.fighter.triggerDash(dirToTarget);
             } else {
                 this.currentAction = dirToTarget > 0 ? 'MOVE_RIGHT' : 'MOVE_LEFT';
@@ -159,60 +173,57 @@ class FighterAI {
             return;
         }
 
-        // 4. CLOSE RANGE (dist < 2.0 units) - TEKKEN COMBAT ENGAGEMENT!
+        // 4. CLOSE RANGE (dist < 2.0 units) - KAMEN RIDER AGITO COMBAT!
         if (dist < 2.0) {
             this.currentAction = 'IDLE';
             const attackRoll = Math.random();
 
             if (attackRoll < this.aggression) {
-                this.fighter.setBlock(false);
-                this.fighter.setCrouch(false);
+                this.fighter.setGuardAndCrouch(false, false);
 
-                // A. Anti-Turtle: If target is in standing guard, use Low Hell Sweep or Throw!
-                if (this.target.isBlocking && Math.random() < 0.65) {
-                    if (Math.random() < 0.5) {
-                        this.fighter.triggerAttack('DOWN_LK');
-                        this.comboQueue = ['3_3_4_FINISHER'];
+                // A. Anti-Guard: If player holds ✕ to Guard, use △ Peluk Banting or ⬇️+□ Sleding!
+                if ((this.target.isBlocking || this.target.isCrouchBlocking) && Math.random() < 0.70) {
+                    if (Math.random() < 0.55) {
+                        this.fighter.requestTriangleThrow(this.target);
+                    } else if (this.target.isBlocking) {
+                        this.fighter.triggerAttack('SLIDE_KICK', true);
                     } else {
-                        this.fighter.requestTekkenCommand('THROW', this.target);
+                        this.fighter.triggerAttack('DASH_STRIKE', true);
                     }
                     return;
                 }
 
-                // B. Anti-Crouch: If target is ducking, crush them with Mid Uppercut!
-                if ((this.target.animState === 'CROUCH' || this.target.animState === 'CROUCH_BLOCK') && Math.random() < 0.70) {
-                    this.fighter.triggerAttack('UPPERCUT');
+                // B. Directional Special ○ Moves in close range
+                if (this.fighter.energy >= 25 && Math.random() < 0.28) {
+                    const specPick = Math.random() < 0.5 ? 'SPECIAL_UPPER' : 'SPECIAL_LOW';
+                    this.fighter.triggerAttack(specPick, true);
                     return;
                 }
 
-                // C. Tekken Combo Strings
+                // C. 4-Hit □ Basic Combo or Sleding Mixup
                 if (Math.random() < this.comboTendency) {
-                    const comboType = Math.floor(Math.random() * 4);
+                    const comboType = Math.floor(Math.random() * 3);
                     if (comboType === 0) {
-                        // 1-1-2 Flash Demon String!
+                        // Full 4-Hit □-□-□-□ Agito Combo!
                         this.fighter.triggerAttack('LP');
-                        this.comboQueue = ['LP_2', '1_1_2_FINISHER'];
+                        this.comboQueue = ['RP', 'LK', '3_3_4_FINISHER'];
                     } else if (comboType === 1) {
-                        // Twin Dragon Crescent (LP -> RP -> RK)
+                        // □-□ into Sleding (⬇️+□) Low Mixup!
                         this.fighter.triggerAttack('LP');
-                        this.comboQueue = ['RP', 'RK'];
-                    } else if (comboType === 2) {
-                        // Tsunami Spin (LK -> DOWN_LK -> 3_3_4_FINISHER)
-                        this.fighter.triggerAttack('LK');
-                        this.comboQueue = ['DOWN_LK', '3_3_4_FINISHER'];
+                        this.comboQueue = ['RP', 'SLIDE_KICK'];
                     } else {
-                        // Demon Axle (LK -> RK)
-                        this.fighter.triggerAttack('LK');
-                        this.comboQueue = ['RK'];
+                        // □-□-□ into Rising Uppercut (⬆️+○)
+                        this.fighter.triggerAttack('LP');
+                        this.comboQueue = ['RP', 'LK', 'SPECIAL_UPPER'];
                     }
                 } else {
-                    const attacks = ['LP', 'RP', 'LK', 'RK', 'DOWN_LK'];
+                    const attacks = ['LP', 'RP', 'LK', 'SLIDE_KICK', 'DASH_STRIKE'];
                     const picked = attacks[Math.floor(Math.random() * attacks.length)];
                     this.fighter.triggerAttack(picked);
                 }
             } else {
                 if (Math.random() < 0.45) {
-                    this.fighter.setBlock(true);
+                    this.fighter.setGuardAndCrouch(true, Math.random() < 0.35);
                     this.actionTimer = 0.25;
                 } else {
                     this.currentAction = dirToTarget > 0 ? 'MOVE_LEFT' : 'MOVE_RIGHT';
