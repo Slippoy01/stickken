@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stickman Shadow Showdown 3D | Three.js Fighting Game</title>
-    <link rel="stylesheet" href="css/style.css?v=4">
+    <link rel="stylesheet" href="css/style.css?v=5">
     <!-- Local Three.js with CDN fallback -->
     <script src="js/three.min.js"></script>
     <script>
@@ -102,7 +102,7 @@
 
     <!-- Touch / Mobile Controls (Arcade Dual-Thumb Layout) -->
     <div id="touch-controls" style="display: none;">
-        <!-- Left Thumb: Movement & Dash -->
+        <!-- Left Thumb: Movement, Crouch & Dash -->
         <div class="touch-cluster touch-movement-cluster">
             <div class="touch-dpad-grid">
                 <button id="touch-jump" class="touch-btn btn-dir-up" title="Jump (Lompat)">
@@ -110,7 +110,7 @@
                     <span class="touch-lbl">LOMPAT</span>
                 </button>
                 <div class="touch-h-row">
-                    <button id="touch-left" class="touch-btn btn-dir-left" title="Move Left (Kiri)">
+                    <button id="touch-left" class="touch-btn btn-dir-left" title="Move Left / Guard (Mundur Tangkis)">
                         <span class="touch-icon">◀</span>
                         <span class="touch-lbl">KIRI</span>
                     </button>
@@ -118,32 +118,48 @@
                         <span class="touch-icon">💨</span>
                         <span class="touch-lbl">DASH</span>
                     </button>
-                    <button id="touch-right" class="touch-btn btn-dir-right" title="Move Right (Kanan)">
+                    <button id="touch-right" class="touch-btn btn-dir-right" title="Move Right (Maju)">
                         <span class="touch-icon">▶</span>
                         <span class="touch-lbl">KANAN</span>
                     </button>
                 </div>
+                <button id="touch-down" class="touch-btn btn-dir-down" title="Crouch / Duck (Merunduk Hindari Serangan High & Banting)">
+                    <span class="touch-icon">▼</span>
+                    <span class="touch-lbl">TUNDUK</span>
+                </button>
             </div>
         </div>
 
-        <!-- Right Thumb: Combat Action Attacks -->
+        <!-- Right Thumb: Tekken 4-Face Combat Actions & Grappling -->
         <div class="touch-cluster touch-action-cluster">
-            <div class="touch-actions-grid">
-                <button id="touch-block" class="touch-btn btn-guard" title="Guard / Tangkis">
-                    <span class="touch-icon">🛡️</span>
-                    <span class="touch-lbl">GUARD</span>
+            <!-- Utility Buttons: Special & Throw -->
+            <div class="touch-utility-row" style="display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 6px;">
+                <button id="touch-throw" class="touch-btn btn-throw" title="Dragon Shoulder Slam (Banting Lawan)">
+                    <span class="touch-icon">🤼</span>
+                    <span class="touch-lbl">BANTING</span>
                 </button>
                 <button id="touch-special" class="touch-btn btn-special" title="Special Ki Blast">
                     <span class="touch-icon">⚡</span>
-                    <span class="touch-lbl">KI BLAST</span>
+                    <span class="touch-lbl">KI SMASH</span>
                 </button>
-                <button id="touch-punch" class="touch-btn btn-punch" title="Punch Combo (Pukulan)">
+            </div>
+            <!-- Tekken 4 Attack Buttons: LP, RP, LK, RK -->
+            <div class="touch-actions-grid touch-tekken-grid">
+                <button id="touch-lp" class="touch-btn btn-lp" title="Left Punch (Tinju Kiri - High)">
                     <span class="touch-icon">🥊</span>
-                    <span class="touch-lbl">TINJU</span>
+                    <span class="touch-lbl">LP (1)</span>
                 </button>
-                <button id="touch-kick" class="touch-btn btn-kick" title="Kick Combo (Tendangan)">
+                <button id="touch-rp" class="touch-btn btn-rp" title="Right Punch (Tinju Kanan - Mid)">
+                    <span class="touch-icon">💥</span>
+                    <span class="touch-lbl">RP (2)</span>
+                </button>
+                <button id="touch-lk" class="touch-btn btn-lk" title="Left Kick (Tendang Kiri - Mid)">
                     <span class="touch-icon">🥋</span>
-                    <span class="touch-lbl">TENDANG</span>
+                    <span class="touch-lbl">LK (3)</span>
+                </button>
+                <button id="touch-rk" class="touch-btn btn-rk" title="Right Kick (Tendang Kanan - High)">
+                    <span class="touch-icon">⚡</span>
+                    <span class="touch-lbl">RK (4)</span>
                 </button>
             </div>
         </div>
@@ -189,9 +205,10 @@
             <!-- Controls Guide Section (Keyboard, Gamepad & Touch Tabs) -->
             <div class="controls-guide-wrapper">
                 <div class="controls-tabs">
-                    <button type="button" class="ctrl-tab-btn active" id="tab-keyboard">⌨️ Keyboard</button>
+                    <button type="button" class="ctrl-tab-btn active" id="tab-tekken" style="color: #00f0ff; font-weight: bold;">🐉 Tekken Move List</button>
+                    <button type="button" class="ctrl-tab-btn" id="tab-keyboard">⌨️ Keyboard</button>
                     <button type="button" class="ctrl-tab-btn" id="tab-gamepad">🎮 Gamepad</button>
-                    <button type="button" class="ctrl-tab-btn" id="tab-touch">📱 Layar Sentuh / HP</button>
+                    <button type="button" class="ctrl-tab-btn" id="tab-touch">📱 Touch HP</button>
                     <div id="gamepad-badge-status" class="gamepad-status-pill disconnected" title="Status Gamepad">
                         <span class="status-dot"></span>
                         <span id="gamepad-status-text">No Gamepad</span>
@@ -199,7 +216,84 @@
                 </div>
 
                 <!-- Keyboard Guide Pane -->
-                <div id="guide-pane-keyboard" class="guide-pane active">
+                                <!-- Tekken 8 Dragon Move List Pane -->
+                <div id="guide-pane-tekken" class="guide-pane active">
+                    <div class="guide-title" style="color: #00f0ff; display: flex; justify-content: space-between; align-items: center;">
+                        <span>🐉 TEKKEN DRAGON KARATE MOVE SET</span>
+                        <span style="font-size: 11px; background: rgba(0,240,255,0.2); padding: 2px 8px; border-radius: 4px; border: 1px solid #00f0ff;">MISHIMA STYLE</span>
+                    </div>
+
+                    <div class="tekken-rules-summary">
+                        <div class="rule-chip"><span class="rule-icon">🛡️</span> <b>AUTO-GUARD:</b> Mundur menjauhi lawan otomatis menangkis serangan High &amp; Mid!</div>
+                        <div class="rule-chip"><span class="rule-icon">⬇️</span> <b>CROUCH / DUCK:</b> Tahan Bawah untuk merunduk: serangan High &amp; Banting lewat di atas kepala (Whiff)! Tahan Mundur+Bawah untuk tangkis Low!</div>
+                        <div class="rule-chip"><span class="rule-icon">🤼</span> <b>BANTING (THROW):</b> Dekat lawan berdiri lalu tekan <kbd>G</kbd> / <kbd>LP+LK</kbd> / <kbd>L1</kbd> untuk bantingan maut unblockable!</div>
+                    </div>
+
+                    <div style="overflow-x: auto; margin-top: 10px;">
+                        <table class="movelist-table">
+                            <thead>
+                                <tr>
+                                    <th>JURUS</th>
+                                    <th>COMMAND</th>
+                                    <th>HIT LEVEL</th>
+                                    <th>SIFAT &amp; KETERANGAN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><b>Dragon Flash (1-1-2)</b></td>
+                                    <td><kbd>LP</kbd> &rarr; <kbd>LP</kbd> &rarr; <kbd>RP</kbd></td>
+                                    <td><span class="badge-hit badge-high">High</span> <span class="badge-hit badge-high">High</span> <span class="badge-hit badge-mid">Mid</span></td>
+                                    <td>28 Dmg &bull; Kombo ikonik Tekken, lunge punch pukul mundur musuh!</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Twin Dragon Crescent</b></td>
+                                    <td><kbd>LP</kbd> &rarr; <kbd>RP</kbd> &rarr; <kbd>RK</kbd></td>
+                                    <td><span class="badge-hit badge-high">High</span> <span class="badge-hit badge-mid">Mid</span> <span class="badge-hit badge-high">High</span></td>
+                                    <td>32 Dmg &bull; Jab lead &rarr; Cross perut &rarr; Tendangan sabit kepala!</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Tsunami Spin (3-3-4)</b></td>
+                                    <td><kbd>LK</kbd> &rarr; <kbd>LK</kbd> &rarr; <kbd>RK</kbd></td>
+                                    <td><span class="badge-hit badge-mid">Mid</span> <span class="badge-hit badge-low">Low</span> <span class="badge-hit badge-mid">Mid</span></td>
+                                    <td>34 Dmg &bull; Tendang dada &rarr; Hell Sweep bawah &rarr; Tornado hop 360°!</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Demon Axle</b></td>
+                                    <td><kbd>LK</kbd> &rarr; <kbd>RK</kbd></td>
+                                    <td><span class="badge-hit badge-mid">Mid</span> <span class="badge-hit badge-high">High</span></td>
+                                    <td>24 Dmg &bull; Dua tendangan beruntun merobek pertahanan.</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Dragon Hell Sweep</b></td>
+                                    <td><kbd>⬇️</kbd> + <kbd>LK</kbd></td>
+                                    <td><span class="badge-hit badge-low">Low</span></td>
+                                    <td>12 Dmg &bull; Menjegal tulang kering lawan (tembus Standing Guard!).</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Electric Dragon Uppercut</b></td>
+                                    <td><kbd>⬇️</kbd> + <kbd>RP</kbd></td>
+                                    <td><span class="badge-hit badge-mid">Mid Launcher</span></td>
+                                    <td>22 Dmg &bull; Melontarkan lawan ke langit untuk combo udara!</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Dragon Shoulder Slam</b></td>
+                                    <td><kbd>G</kbd> / <kbd>LP+LK</kbd> / <kbd>L1</kbd></td>
+                                    <td><span class="badge-hit badge-throw">Throw (Grab)</span></td>
+                                    <td>24 Dmg &bull; Bantingan pundak membanting lawan keras ke lantai!</td>
+                                </tr>
+                                <tr>
+                                    <td><b>Dragon Ki Smash</b></td>
+                                    <td><kbd>U</kbd> / <kbd>RP+RK</kbd> / <kbd>R1</kbd></td>
+                                    <td><span class="badge-hit badge-mid">Special Blast</span></td>
+                                    <td>26 Dmg &bull; Ledakan proyektil energi jarak jauh (Energi &ge; 40%).</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+<div id="guide-pane-keyboard" class="guide-pane">
                     <div class="guide-title">⌨️ Combat Controls (Player 1 - Keyboard)</div>
                     <div class="guide-row"><span class="key-tag">A</span> / <span class="key-tag">D</span> <span class="guide-action">Move Left / Right</span></div>
                     <div class="guide-row"><span class="key-tag">W</span> or <span class="key-tag">Space</span> <span class="guide-action">Jump</span></div>
@@ -364,20 +458,19 @@
             <!-- Pause Controls Accordion Panel -->
             <div id="pause-controls-panel" style="display: none; margin-bottom: 15px; text-align: left;">
                 <div class="controls-guide-wrapper" style="margin-top: 5px;">
-                    <div class="guide-title" style="color: #00f0ff;">🎮 Ringkasan Kontrol Gamepad</div>
-                    <div class="gamepad-grid" style="font-size: 12px;">
-                        <div class="gamepad-row"><span class="gamepad-badge dpad">Stick / D-Pad</span> Gerak Kiri / Kanan</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-a">A / ✕</span> Lompat</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-x">X / □</span> 3-Hit Punch Combo</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-y">Y / △</span> 3-Hit Kick Combo</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-b">B / ○</span> Special Ki Blast</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">LB</span> / <span class="gamepad-badge dpad">&darr;</span> Guard / Blok (-80% Dmg)</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">RB</span> / <span class="gamepad-badge btn-trigger">RT</span> Shadow Dash Evade</div>
-                        <div class="gamepad-row"><span class="gamepad-badge btn-meta">START</span> Resume / Jeda</div>
+                    <div class="guide-title" style="color: #00f0ff;">🥋 Tekken Controls &amp; Dragon Movelist</div>
+                    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">
+                        🛡️ <strong>Mundur:</strong> Auto-Guard &bull; ⬇️ <strong>Bawah:</strong> Merunduk (Duck High &amp; Banting) &bull; 🤼 <strong>Banting:</strong> G / L1
                     </div>
-                    <div class="guide-title" style="color: #ffe600; margin-top: 12px;">⌨️ Keyboard P1</div>
-                    <div style="font-size: 12px; line-height: 1.6;">
-                        <span class="key-tag">A</span>/<span class="key-tag">D</span> Gerak | <span class="key-tag">W</span> Lompat | <span class="key-tag">J</span> Tinju | <span class="key-tag">K</span> Tendang | <span class="key-tag">L</span> Dash | <span class="key-tag">I</span> Blok | <span class="key-tag">U</span> Ki Blast
+                    <div class="gamepad-grid" style="font-size: 12px;">
+                        <div class="gamepad-row"><span class="gamepad-badge btn-x">X / J</span> <strong>LP (1)</strong> Tinju Kiri (High)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-y">Y / I</span> <strong>RP (2)</strong> Tinju Kanan (Mid)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-a">A / K</span> <strong>LK (3)</strong> Tendang Kiri (Mid)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-b">B / L</span> <strong>RK (4)</strong> Tendang Kanan (High)</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">LB / G</span> <strong>BANTING (Throw)</strong> Shoulder Slam!</div>
+                        <div class="gamepad-row"><span class="key-tag">⬇️+RP</span> <strong>UPPERCUT</strong> Sky Launcher!</div>
+                        <div class="gamepad-row"><span class="key-tag">⬇️+LK</span> <strong>HELL SWEEP</strong> Low trip kaki musuh!</div>
+                        <div class="gamepad-row"><span class="gamepad-badge btn-bumper">RB / U</span> <strong>SPECIAL</strong> Ki Blast</div>
                     </div>
                 </div>
             </div>
@@ -398,13 +491,13 @@
     </div>
 
     <!-- Game Scripts (Modular & Clean) -->
-    <script src="js/audio.js?v=4"></script>
-    <script src="js/vfx.js?v=4"></script>
-    <script src="js/stickman.js?v=4"></script>
-    <script src="js/arena.js?v=4"></script>
-    <script src="js/ai.js?v=4"></script>
-    <script src="js/network.js?v=4"></script>
-    <script src="js/game.js?v=4"></script>
+    <script src="js/audio.js?v=5"></script>
+    <script src="js/vfx.js?v=5"></script>
+    <script src="js/stickman.js?v=5"></script>
+    <script src="js/arena.js?v=5"></script>
+    <script src="js/ai.js?v=5"></script>
+    <script src="js/network.js?v=5"></script>
+    <script src="js/game.js?v=5"></script>
 
     <!-- UI Event Wiring -->
     <script>

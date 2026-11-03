@@ -421,14 +421,34 @@ class StickmanGame {
 
         const left = isDown(14) || stickLeft;
         const right = isDown(15) || stickRight;
-        const jump = justPressed(0) || justPressed(12) || justStickUp;
-        const punch = justPressed(2);
-        const kick = justPressed(3);
-        const dash = justPressed(5) || justPressed(7);
-        const block = isDown(4) || isDown(13) || stickDown || (pad.buttons[6] && pad.buttons[6].value > 0.35);
-        const special = justPressed(1) || (pad.buttons[6] && pad.buttons[6].value > 0.65 && !prevBtns.ltSpecial);
+        const down = isDown(13) || stickDown;
+        const up = isDown(12) || stickUp;
+        const jump = justPressed(12) || justStickUp;
+
+        // Tekken 4-Face Button Architecture:
+        // Button 2 (X / Square) = LP (Left Punch)
+        // Button 3 (Y / Triangle) = RP (Right Punch)
+        // Button 0 (A / Cross) = LK (Left Kick)
+        // Button 1 (B / Circle) = RK (Right Kick)
+        const lp = justPressed(2);
+        const rp = justPressed(3);
+        const lk = justPressed(0);
+        const rk = justPressed(1);
+
+        // L1 / LB (Button 4) = THROW / BANTING (or LP+LK)
+        const throwCmd = justPressed(4) || (lp && lk);
+
+        // R1 / RB (Button 5) = SPECIAL KI SMASH (or RP+RK)
+        const special = justPressed(5) || (rp && rk) || (pad.buttons[6] && pad.buttons[6].value > 0.65 && !prevBtns.ltSpecial);
+
+        // L2 / R2 (Buttons 6, 7) = DASH
+        const dash = justPressed(6) || justPressed(7);
+
         const start = justPressed(9);
         const confirm = justPressed(0) || justPressed(9);
+        const punch = lp || rp;
+        const kick = lk || rk;
+        const block = down;
 
         // Record current button states for next frame edge detection
         const currentBtns = {};
@@ -450,7 +470,14 @@ class StickmanGame {
         return {
             left,
             right,
+            down,
+            up,
             jump,
+            lp,
+            rp,
+            lk,
+            rk,
+            throwCmd,
             punch,
             kick,
             dash,
@@ -829,31 +856,40 @@ class StickmanGame {
     // Online PvP: Handles local player input (Host controls P1, Guest controls P2)
     handleLocalFightingInput(p, opponent, delta, isP1) {
         const st = p.animState;
-        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
+        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP' || st === 'THROWN') return;
 
         const pad = this.pad1Input || this.pad2Input;
 
-        const leftKey = this.keys['KeyA'] || this.keys['ArrowLeft'] || (pad && pad.left);
-        const rightKey = this.keys['KeyD'] || this.keys['ArrowRight'] || (pad && pad.right);
-        const jumpKey = this.keys['KeyW'] || this.keys['Space'] || this.keys['ArrowUp'] || (pad && pad.jump);
-        const blockKey = this.keys['KeyI'] || this.keys['KeyE'] || this.keys['KeyS'] || (pad && pad.block);
+        const leftKey = Boolean(this.keys['KeyA'] || (isP1 && this.keys['ArrowLeft']) || (pad && pad.left));
+        const rightKey = Boolean(this.keys['KeyD'] || (isP1 && this.keys['ArrowRight']) || (pad && pad.right));
+        const downKey = Boolean(this.keys['KeyS'] || (isP1 && this.keys['ArrowDown']) || (pad && pad.down));
+        const jumpKey = Boolean(this.keys['KeyW'] || this.keys['Space'] || (isP1 && this.keys['ArrowUp']) || (pad && pad.jump));
 
-        const punchKey = this.keys['KeyJ'] || (pad && pad.punch);
-        const kickKey = this.keys['KeyK'] || (pad && pad.kick);
-        const dashKey = this.keys['KeyL'] || this.keys['ShiftLeft'] || (pad && pad.dash);
-        const specialKey = this.keys['KeyU'] || this.keys['KeyQ'] || (pad && pad.special);
+        // Tekken 4-Button Controls:
+        const lpKey = Boolean(this.keys['KeyJ'] || (pad && pad.lp));
+        const rpKey = Boolean(this.keys['KeyI'] || (pad && pad.rp));
+        const lkKey = Boolean(this.keys['KeyK'] || (pad && pad.lk));
+        const rkKey = Boolean(this.keys['KeyL'] || (pad && pad.rk));
+
+        // Throws & Specials
+        const throwKey = Boolean(this.keys['KeyG'] || (lpKey && lkKey) || (pad && pad.throwCmd));
+        const specialKey = Boolean(this.keys['KeyU'] || this.keys['KeyQ'] || (rpKey && rkKey) || (pad && pad.special));
+        const dashKey = Boolean(this.keys['ShiftLeft'] || this.keys['ShiftRight'] || (pad && pad.dash));
 
         const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
+        const isMovingBack = (leftKey && dirToOpponent > 0) || (rightKey && dirToOpponent < 0);
 
         // Detect continuous movement state change and transmit to peer
         const curMove = {
-            left: Boolean(leftKey),
-            right: Boolean(rightKey),
-            block: Boolean(blockKey)
+            left: leftKey,
+            right: rightKey,
+            down: downKey,
+            block: isMovingBack
         };
 
         if (this.lastSentMove.left !== curMove.left ||
             this.lastSentMove.right !== curMove.right ||
+            this.lastSentMove.down !== curMove.down ||
             this.lastSentMove.block !== curMove.block) {
             this.lastSentMove = curMove;
             if (window.networkManager && window.networkManager.isConnected) {
@@ -861,22 +897,40 @@ class StickmanGame {
                     type: 'MOVE',
                     left: curMove.left,
                     right: curMove.right,
+                    down: curMove.down,
                     block: curMove.block
                 });
             }
         }
 
-        // Guard / Block
-        if (blockKey && st !== 'ATTACK' && st !== 'DASH') {
+        // Auto-Guard on Backpedal & Crouch
+        if (downKey && st !== 'ATTACK' && st !== 'DASH') {
             p.setFacing(dirToOpponent);
-            p.setBlock(true);
+            p.setCrouch(true, isMovingBack);
             p.moveDir = 0;
-            return;
         } else {
-            p.setBlock(false);
+            p.setCrouch(false);
+            if (isMovingBack && st !== 'ATTACK' && st !== 'DASH') {
+                p.setFacing(dirToOpponent);
+                p.setBlock(true);
+            } else {
+                p.setBlock(false);
+            }
         }
 
-        // Special Ki Blast
+        // 1. Throws / Grapple (Banting)
+        if (throwKey) {
+            this.keys['KeyG'] = false;
+            if (pad) pad.throwCmd = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand('THROW', opponent);
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'THROW' });
+            }
+            return;
+        }
+
+        // 2. Special Ki Blast / Heat Smash
         if (specialKey) {
             this.keys['KeyU'] = false;
             this.keys['KeyQ'] = false;
@@ -889,10 +943,10 @@ class StickmanGame {
             return;
         }
 
-        // Shadow Dash
+        // 3. Shadow Dash
         if (dashKey) {
-            this.keys['KeyL'] = false;
             this.keys['ShiftLeft'] = false;
+            this.keys['ShiftRight'] = false;
             if (pad) pad.dash = false;
             const dashDir = leftKey ? -1 : (rightKey ? 1 : dirToOpponent);
             p.setFacing(dirToOpponent);
@@ -903,32 +957,58 @@ class StickmanGame {
             return;
         }
 
-        // 3-Hit Punch Combo
-        if (punchKey) {
+        // 4. LP (Tinju Kiri)
+        if (lpKey) {
             this.keys['KeyJ'] = false;
-            if (pad) pad.punch = false;
+            if (pad) pad.lp = false;
             p.setFacing(dirToOpponent);
-            p.requestPunchCombo();
+            p.requestTekkenCommand('LP', opponent);
             if (window.networkManager && window.networkManager.isConnected) {
-                window.networkManager.send({ type: 'ACTION', act: 'PUNCH' });
+                window.networkManager.send({ type: 'ACTION', act: 'LP' });
             }
             return;
         }
 
-        // 3-Hit Kick Combo
-        if (kickKey) {
+        // 5. RP (Tinju Kanan / Uppercut)
+        if (rpKey) {
+            this.keys['KeyI'] = false;
+            if (pad) pad.rp = false;
+            p.setFacing(dirToOpponent);
+            const act = p.isCrouching ? 'UPPERCUT' : 'RP';
+            p.requestTekkenCommand(act, opponent);
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: act });
+            }
+            return;
+        }
+
+        // 6. LK (Tendang Kiri / Hell Sweep)
+        if (lkKey) {
             this.keys['KeyK'] = false;
-            if (pad) pad.kick = false;
+            if (pad) pad.lk = false;
             p.setFacing(dirToOpponent);
-            p.requestKickCombo();
+            const act = p.isCrouching ? 'DOWN_LK' : 'LK';
+            p.requestTekkenCommand(act, opponent);
             if (window.networkManager && window.networkManager.isConnected) {
-                window.networkManager.send({ type: 'ACTION', act: 'KICK' });
+                window.networkManager.send({ type: 'ACTION', act: act });
             }
             return;
         }
 
-        // Jump
-        if (jumpKey && p.isGrounded && st !== 'ATTACK') {
+        // 7. RK (Tendang Kanan)
+        if (rkKey) {
+            this.keys['KeyL'] = false;
+            if (pad) pad.rk = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand('RK', opponent);
+            if (window.networkManager && window.networkManager.isConnected) {
+                window.networkManager.send({ type: 'ACTION', act: 'RK' });
+            }
+            return;
+        }
+
+        // 8. Jump
+        if (jumpKey && p.isGrounded && st !== 'ATTACK' && !p.isCrouching) {
             if (pad) pad.jump = false;
             p.setFacing(dirToOpponent);
             p.triggerJump();
@@ -938,8 +1018,8 @@ class StickmanGame {
             return;
         }
 
-        // Horizontal Movement
-        if (st !== 'ATTACK' && st !== 'DASH') {
+        // 9. Horizontal Movement
+        if (st !== 'ATTACK' && st !== 'DASH' && !p.isCrouching) {
             p.setFacing(dirToOpponent);
             if (leftKey) {
                 p.position.x -= p.walkSpeed * delta;
@@ -951,7 +1031,7 @@ class StickmanGame {
                 if (p.isGrounded) p.animState = 'RUN';
             } else {
                 p.moveDir = 0;
-                if (p.isGrounded) p.animState = 'IDLE';
+                if (p.isGrounded && !p.isBlocking) p.animState = 'IDLE';
             }
         }
     }
@@ -959,24 +1039,31 @@ class StickmanGame {
     // Online PvP: Applies received remote input to the remote fighter
     handleRemoteFightingInput(p, opponent, delta) {
         const st = p.animState;
-        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
+        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP' || st === 'THROWN') return;
 
         const leftKey = Boolean(this.remoteKeys.left);
         const rightKey = Boolean(this.remoteKeys.right);
+        const downKey = Boolean(this.remoteKeys.down);
         const blockKey = Boolean(this.remoteKeys.block);
 
         const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
+        const isMovingBack = (leftKey && dirToOpponent > 0) || (rightKey && dirToOpponent < 0);
 
-        if (blockKey && st !== 'ATTACK' && st !== 'DASH') {
+        if (downKey && st !== 'ATTACK' && st !== 'DASH') {
             p.setFacing(dirToOpponent);
-            p.setBlock(true);
+            p.setCrouch(true, isMovingBack || blockKey);
             p.moveDir = 0;
-            return;
         } else {
-            p.setBlock(false);
+            p.setCrouch(false);
+            if ((isMovingBack || blockKey) && st !== 'ATTACK' && st !== 'DASH') {
+                p.setFacing(dirToOpponent);
+                p.setBlock(true);
+            } else {
+                p.setBlock(false);
+            }
         }
 
-        if (st !== 'ATTACK' && st !== 'DASH') {
+        if (st !== 'ATTACK' && st !== 'DASH' && !p.isCrouching) {
             p.setFacing(dirToOpponent);
             if (leftKey) {
                 p.position.x -= p.walkSpeed * delta;
@@ -988,7 +1075,7 @@ class StickmanGame {
                 if (p.isGrounded) p.animState = 'RUN';
             } else {
                 p.moveDir = 0;
-                if (p.isGrounded) p.animState = 'IDLE';
+                if (p.isGrounded && !p.isBlocking) p.animState = 'IDLE';
             }
         }
     }
@@ -996,34 +1083,51 @@ class StickmanGame {
     // Player 1 Local Offline Input Handler
     handlePlayer1Input(p, opponent, delta) {
         const st = p.animState;
-        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
+        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP' || st === 'THROWN') return;
 
         const pad = this.pad1Input;
         const is1PMode = (this.gameMode !== 'VERSUS_2P');
 
-        const leftKey = this.keys['KeyA'] || (is1PMode && this.keys['ArrowLeft']) || (pad && pad.left);
-        const rightKey = this.keys['KeyD'] || (is1PMode && this.keys['ArrowRight']) || (pad && pad.right);
-        const jumpKey = this.keys['KeyW'] || this.keys['Space'] || (is1PMode && this.keys['ArrowUp']) || (pad && pad.jump);
-        const blockKey = this.keys['KeyI'] || this.keys['KeyE'] || this.keys['KeyS'] || (pad && pad.block);
+        const leftKey = Boolean(this.keys['KeyA'] || (is1PMode && this.keys['ArrowLeft']) || (pad && pad.left));
+        const rightKey = Boolean(this.keys['KeyD'] || (is1PMode && this.keys['ArrowRight']) || (pad && pad.right));
+        const downKey = Boolean(this.keys['KeyS'] || (is1PMode && this.keys['ArrowDown']) || (pad && pad.down));
+        const jumpKey = Boolean(this.keys['KeyW'] || this.keys['Space'] || (is1PMode && this.keys['ArrowUp']) || (pad && pad.jump));
 
-        const punchKey = this.keys['KeyJ'] || (pad && pad.punch);
-        const kickKey = this.keys['KeyK'] || (pad && pad.kick);
-        const dashKey = this.keys['KeyL'] || this.keys['ShiftLeft'] || (pad && pad.dash);
-        const specialKey = this.keys['KeyU'] || this.keys['KeyQ'] || (pad && pad.special);
+        const lpKey = Boolean(this.keys['KeyJ'] || (pad && pad.lp));
+        const rpKey = Boolean(this.keys['KeyI'] || (pad && pad.rp));
+        const lkKey = Boolean(this.keys['KeyK'] || (pad && pad.lk));
+        const rkKey = Boolean(this.keys['KeyL'] || (pad && pad.rk));
+
+        const throwKey = Boolean(this.keys['KeyG'] || (lpKey && lkKey) || (pad && pad.throwCmd));
+        const specialKey = Boolean(this.keys['KeyU'] || this.keys['KeyQ'] || (rpKey && rkKey) || (pad && pad.special));
+        const dashKey = Boolean(this.keys['ShiftLeft'] || (pad && pad.dash));
 
         const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
+        const isMovingBack = (leftKey && dirToOpponent > 0) || (rightKey && dirToOpponent < 0);
 
-        // Guard / Block
-        if (blockKey && st !== 'ATTACK' && st !== 'DASH') {
+        // Auto-Guard & Crouch
+        if (downKey && st !== 'ATTACK' && st !== 'DASH') {
             p.setFacing(dirToOpponent);
-            p.setBlock(true);
+            p.setCrouch(true, isMovingBack);
             p.moveDir = 0;
-            return;
         } else {
-            p.setBlock(false);
+            p.setCrouch(false);
+            if (isMovingBack && st !== 'ATTACK' && st !== 'DASH') {
+                p.setFacing(dirToOpponent);
+                p.setBlock(true);
+            } else {
+                p.setBlock(false);
+            }
         }
 
-        // Special Ki Blast
+        if (throwKey) {
+            this.keys['KeyG'] = false;
+            if (pad) pad.throwCmd = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand('THROW', opponent);
+            return;
+        }
+
         if (specialKey) {
             this.keys['KeyU'] = false;
             this.keys['KeyQ'] = false;
@@ -1033,9 +1137,7 @@ class StickmanGame {
             return;
         }
 
-        // Shadow Dash
         if (dashKey) {
-            this.keys['KeyL'] = false;
             this.keys['ShiftLeft'] = false;
             if (pad) pad.dash = false;
             const dashDir = leftKey ? -1 : (rightKey ? 1 : dirToOpponent);
@@ -1044,34 +1146,46 @@ class StickmanGame {
             return;
         }
 
-        // 3-Hit Punch Combo
-        if (punchKey) {
+        if (lpKey) {
             this.keys['KeyJ'] = false;
-            if (pad) pad.punch = false;
+            if (pad) pad.lp = false;
             p.setFacing(dirToOpponent);
-            p.requestPunchCombo();
+            p.requestTekkenCommand('LP', opponent);
             return;
         }
 
-        // 3-Hit Kick Combo
-        if (kickKey) {
+        if (rpKey) {
+            this.keys['KeyI'] = false;
+            if (pad) pad.rp = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand(p.isCrouching ? 'UPPERCUT' : 'RP', opponent);
+            return;
+        }
+
+        if (lkKey) {
             this.keys['KeyK'] = false;
-            if (pad) pad.kick = false;
+            if (pad) pad.lk = false;
             p.setFacing(dirToOpponent);
-            p.requestKickCombo();
+            p.requestTekkenCommand(p.isCrouching ? 'DOWN_LK' : 'LK', opponent);
             return;
         }
 
-        // Jump
-        if (jumpKey && p.isGrounded && st !== 'ATTACK') {
+        if (rkKey) {
+            this.keys['KeyL'] = false;
+            if (pad) pad.rk = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand('RK', opponent);
+            return;
+        }
+
+        if (jumpKey && p.isGrounded && st !== 'ATTACK' && !p.isCrouching) {
             if (pad) pad.jump = false;
             p.setFacing(dirToOpponent);
             p.triggerJump();
             return;
         }
 
-        // Horizontal Movement
-        if (st !== 'ATTACK' && st !== 'DASH') {
+        if (st !== 'ATTACK' && st !== 'DASH' && !p.isCrouching) {
             p.setFacing(dirToOpponent);
             if (leftKey) {
                 p.position.x -= p.walkSpeed * delta;
@@ -1083,7 +1197,7 @@ class StickmanGame {
                 if (p.isGrounded) p.animState = 'RUN';
             } else {
                 p.moveDir = 0;
-                if (p.isGrounded) p.animState = 'IDLE';
+                if (p.isGrounded && !p.isBlocking) p.animState = 'IDLE';
             }
         }
     }
@@ -1091,34 +1205,51 @@ class StickmanGame {
     // Player 2 Local Offline Input Handler (2P Versus)
     handlePlayer2Input(p, opponent, delta) {
         const st = p.animState;
-        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP') return;
+        if (st === 'KO' || st === 'HURT' || st === 'KNOCKDOWN' || st === 'GETUP' || st === 'THROWN') return;
 
         const pad = this.pad2Input;
 
-        const leftKey = this.keys['ArrowLeft'] || this.keys['Numpad4'] || (pad && pad.left);
-        const rightKey = this.keys['ArrowRight'] || this.keys['Numpad6'] || (pad && pad.right);
-        const jumpKey = this.keys['ArrowUp'] || this.keys['Numpad8'] || (pad && pad.jump);
-        const blockKey = this.keys['Numpad5'] || this.keys['KeyH'] || this.keys['ArrowDown'] || (pad && pad.block);
+        const leftKey = Boolean(this.keys['ArrowLeft'] || this.keys['Numpad4'] || (pad && pad.left));
+        const rightKey = Boolean(this.keys['ArrowRight'] || this.keys['Numpad6'] || (pad && pad.right));
+        const downKey = Boolean(this.keys['ArrowDown'] || this.keys['Numpad2'] || (pad && pad.down));
+        const jumpKey = Boolean(this.keys['ArrowUp'] || this.keys['Numpad8'] || (pad && pad.jump));
 
-        const punchKey = this.keys['Numpad1'] || this.keys['KeyB'] || (pad && pad.punch);
-        const kickKey = this.keys['Numpad2'] || this.keys['KeyN'] || (pad && pad.kick);
-        const dashKey = this.keys['Numpad3'] || this.keys['KeyM'] || (pad && pad.dash);
-        const specialKey = this.keys['Numpad0'] || this.keys['KeyG'] || (pad && pad.special);
+        const lpKey = Boolean(this.keys['Numpad1'] || this.keys['KeyB'] || (pad && pad.lp));
+        const rpKey = Boolean(this.keys['Numpad2'] || this.keys['KeyN'] || (pad && pad.rp));
+        const lkKey = Boolean(this.keys['Numpad4'] || this.keys['KeyM'] || (pad && pad.lk));
+        const rkKey = Boolean(this.keys['Numpad5'] || this.keys['KeyH'] || (pad && pad.rk));
+
+        const throwKey = Boolean(this.keys['Numpad0'] || (lpKey && lkKey) || (pad && pad.throwCmd));
+        const specialKey = Boolean(this.keys['Numpad3'] || (rpKey && rkKey) || (pad && pad.special));
+        const dashKey = Boolean(this.keys['Numpad6'] || this.keys['ShiftRight'] || (pad && pad.dash));
 
         const dirToOpponent = opponent.position.x >= p.position.x ? 1 : -1;
+        const isMovingBack = (leftKey && dirToOpponent > 0) || (rightKey && dirToOpponent < 0);
 
-        if (blockKey && st !== 'ATTACK' && st !== 'DASH') {
+        if (downKey && st !== 'ATTACK' && st !== 'DASH') {
             p.setFacing(dirToOpponent);
-            p.setBlock(true);
+            p.setCrouch(true, isMovingBack);
             p.moveDir = 0;
-            return;
         } else {
-            p.setBlock(false);
+            p.setCrouch(false);
+            if (isMovingBack && st !== 'ATTACK' && st !== 'DASH') {
+                p.setFacing(dirToOpponent);
+                p.setBlock(true);
+            } else {
+                p.setBlock(false);
+            }
+        }
+
+        if (throwKey) {
+            this.keys['Numpad0'] = false;
+            if (pad) pad.throwCmd = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand('THROW', opponent);
+            return;
         }
 
         if (specialKey) {
-            this.keys['Numpad0'] = false;
-            this.keys['KeyG'] = false;
+            this.keys['Numpad3'] = false;
             if (pad) pad.special = false;
             p.setFacing(dirToOpponent);
             p.triggerAttack('SPECIAL');
@@ -1126,8 +1257,8 @@ class StickmanGame {
         }
 
         if (dashKey) {
-            this.keys['Numpad3'] = false;
-            this.keys['KeyM'] = false;
+            this.keys['Numpad6'] = false;
+            this.keys['ShiftRight'] = false;
             if (pad) pad.dash = false;
             const dashDir = leftKey ? -1 : (rightKey ? 1 : dirToOpponent);
             p.setFacing(dirToOpponent);
@@ -1135,32 +1266,50 @@ class StickmanGame {
             return;
         }
 
-        if (punchKey) {
+        if (lpKey) {
             this.keys['Numpad1'] = false;
             this.keys['KeyB'] = false;
-            if (pad) pad.punch = false;
+            if (pad) pad.lp = false;
             p.setFacing(dirToOpponent);
-            p.requestPunchCombo();
+            p.requestTekkenCommand('LP', opponent);
             return;
         }
 
-        if (kickKey) {
+        if (rpKey) {
             this.keys['Numpad2'] = false;
             this.keys['KeyN'] = false;
-            if (pad) pad.kick = false;
+            if (pad) pad.rp = false;
             p.setFacing(dirToOpponent);
-            p.requestKickCombo();
+            p.requestTekkenCommand(p.isCrouching ? 'UPPERCUT' : 'RP', opponent);
             return;
         }
 
-        if (jumpKey && p.isGrounded && st !== 'ATTACK') {
+        if (lkKey) {
+            this.keys['Numpad4'] = false;
+            this.keys['KeyM'] = false;
+            if (pad) pad.lk = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand(p.isCrouching ? 'DOWN_LK' : 'LK', opponent);
+            return;
+        }
+
+        if (rkKey) {
+            this.keys['Numpad5'] = false;
+            this.keys['KeyH'] = false;
+            if (pad) pad.rk = false;
+            p.setFacing(dirToOpponent);
+            p.requestTekkenCommand('RK', opponent);
+            return;
+        }
+
+        if (jumpKey && p.isGrounded && st !== 'ATTACK' && !p.isCrouching) {
             if (pad) pad.jump = false;
             p.setFacing(dirToOpponent);
             p.triggerJump();
             return;
         }
 
-        if (st !== 'ATTACK' && st !== 'DASH') {
+        if (st !== 'ATTACK' && st !== 'DASH' && !p.isCrouching) {
             p.setFacing(dirToOpponent);
             if (leftKey) {
                 p.position.x -= p.walkSpeed * delta;
@@ -1172,7 +1321,7 @@ class StickmanGame {
                 if (p.isGrounded) p.animState = 'RUN';
             } else {
                 p.moveDir = 0;
-                if (p.isGrounded) p.animState = 'IDLE';
+                if (p.isGrounded && !p.isBlocking) p.animState = 'IDLE';
             }
         }
     }
@@ -1259,7 +1408,8 @@ class StickmanGame {
             if (distChest < hitRadius || distHead < hitRadius || inStrikeBox) {
                 attacker.hitRegistered = true;
 
-                const didHit = victim.takeDamage(dmg, knockX, knockY, isHeavy, attacker);
+                const hitLevel = Stickman.getAttackHitLevel(attacker.attackType);
+                const didHit = victim.takeDamage(dmg, knockX, knockY, isHeavy, attacker, hitLevel);
                 if (didHit) {
                     this.hitstopTimer = isHeavy ? 0.065 : 0.038;
                     attacker.energy = Math.min(attacker.maxEnergy, attacker.energy + 12);

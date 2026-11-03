@@ -280,3 +280,4 @@ class NetworkManager {
 
 // Global Network Manager instance
 window.networkManager = new NetworkManager();
+

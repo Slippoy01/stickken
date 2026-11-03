@@ -1,8 +1,11 @@
 /**
- * Stickman Shadow Showdown 3D - Procedural Rig & Tekken-Style Animation System
- * Features 3-Phase Keyframe Pose Interpolation (Chamber -> Snap/Hold -> Guard Recovery),
- * Input Buffering for seamless 3-Hit Punch Combos (Left Jab -> Right Cross -> Electric Uppercut)
- * and 3-Hit Kick Combos (Left Roundhouse -> Right Heavy Kick -> 360 Tornado Spin Kick).
+ * Stickman Shadow Showdown 3D - Procedural Rig & Tekken 8 Fighting System
+ * Authentic Mishima-style Karate Choreography:
+ * - 4-Button Tekken Architecture: LP (1), RP (2), LK (3), RK (4), Throws (1+3/G), Crouch/Duck
+ * - 3-Tier Hit Level System: HIGH (duckable), MID (crushes crouch), LOW (penetrates standing guard)
+ * - Auto-Guard on Backpedal (Mundur otomatis nangkis High & Mid)
+ * - 3-Phase Dynamic Keyframe Interpolation (Chamber -> Snap/Hold -> Recovery)
+ * - Authentic Throw/Grappling mechanics with 3D kinematic hoist & earth-shattering slam!
  */
 
 class Stickman {
@@ -24,6 +27,8 @@ class Stickman {
         this.maxEnergy = 100;
         this.energy = 50;
         this.isBlocking = false;
+        this.isCrouching = false;
+        this.isCrouchBlocking = false;
         this.isInvulnerable = false;
         this.invulnerableTimer = 0;
 
@@ -41,27 +46,30 @@ class Stickman {
         this.moveDir = 0; // -1, 0, 1
 
         // Animation & Combo State Machine
-        // States: IDLE, RUN, JUMP, DASH, ATTACK, BLOCK, HURT, KNOCKDOWN, GETUP, KO, VICTORY
+        // States: IDLE, RUN, CROUCH, CROUCH_BLOCK, JUMP, DASH, ATTACK, BLOCK, HURT, KNOCKDOWN, GETUP, THROWN, KO, VICTORY
         this.animState = 'IDLE';
         this.animTime = 0;
-        // Attack Types: PUNCH_1, PUNCH_2, PUNCH_3, KICK_1, KICK_2, KICK_3, AIR_KICK, SPECIAL
         this.attackType = null;
         this.attackPhase = 0; // 0 = chamber/windup, 1 = active strike & hold, 2 = recovery
         this.attackTimer = 0;
         this.attackDuration = 0;
         this.hitRegistered = false;
 
-        // Separate 3-Hit Combo Counters & Input Buffer
-        this.punchComboStep = 0; // 1: Left Jab, 2: Right Cross, 3: Uppercut
-        this.kickComboStep = 0;  // 1: Left Kick, 2: Right Kick, 3: 360 Tornado Kick
+        // Tekken Combo Strings & Input Buffer
+        this.punchComboStep = 0;
+        this.kickComboStep = 0;
         this.comboResetTimer = 0;
-        this.queuedAttack = null; // Buffered next attack input for smooth Tekken combos
+        this.queuedAttack = null; // Buffered next attack input
         this.trailTimer = 0;
+
+        // Throw / Grapple References
+        this.throwVictim = null;
+        this.throwAttacker = null;
 
         // Headband Cloth Segments
         this.headbandTails = [];
 
-        // Define Base Guard Pose (Tekken Fighting Stance)
+        // Base Stances (Tekken Fighting Guard & Crouches)
         this.GUARD_POSE = {
             hipsY: 0.89,
             hips: [0, -0.28, 0],
@@ -77,9 +85,70 @@ class Stickman {
             rKnee: 0.38
         };
 
+        this.CROUCH_POSE = {
+            hipsY: 0.62,
+            hips: [0.12, -0.22, 0],
+            spine: [0.38, 0.22, 0],
+            neck: [-0.25, 0, 0],
+            lShoulder: [-0.68, 0.22, 0.25],
+            lElbow: -1.75,
+            rShoulder: [-0.55, -0.22, -0.25],
+            rElbow: -1.85,
+            lHip: [-0.85, 0.12, 0.08],
+            lKnee: 1.45,
+            rHip: [0.32, -0.12, -0.08],
+            rKnee: 1.25
+        };
+
+        this.CROUCH_BLOCK_POSE = {
+            hipsY: 0.58,
+            hips: [0.15, -0.32, 0],
+            spine: [0.42, 0.32, 0],
+            neck: [-0.30, 0, 0],
+            lShoulder: [-1.25, -0.20, 0.25],
+            lElbow: -1.75,
+            rShoulder: [-1.25, 0.20, -0.25],
+            rElbow: -1.75,
+            lHip: [-0.92, 0.15, 0.10],
+            lKnee: 1.55,
+            rHip: [0.38, -0.15, -0.10],
+            rKnee: 1.35
+        };
+
         // Build the 3D Procedural Mesh & Skeleton
         this.buildMesh();
         this.setFacing(this.facing);
+    }
+
+    // Static helper to query Hit Level for any attack
+    static getAttackHitLevel(attackType) {
+        switch (attackType) {
+            case 'LP':
+            case 'LP_2':
+            case 'PUNCH_1':
+            case 'RK':
+            case 'KICK_1':
+                return 'HIGH';
+            case 'RP':
+            case 'PUNCH_2':
+            case '1_1_2_FINISHER':
+            case 'PUNCH_3':
+            case 'LK':
+            case 'KICK_2':
+            case 'UPPERCUT':
+            case '3_3_4_FINISHER':
+            case 'KICK_3':
+            case 'AIR_KICK':
+            case 'SPECIAL':
+                return 'MID';
+            case 'DOWN_LK':
+            case 'LOW_KICK':
+                return 'LOW';
+            case 'THROW_SLAM':
+                return 'THROW';
+            default:
+                return 'MID';
+        }
     }
 
     buildMesh() {
@@ -142,7 +211,7 @@ class Stickman {
         const beltMesh = new THREE.Mesh(beltGeo, this.glowMaterial);
         this.hips.add(beltMesh);
 
-        // 2. Spine & Chest (Extends upward +Y from Hips)
+        // 2. Spine & Chest
         this.spine = new THREE.Group();
         this.hips.add(this.spine);
 
@@ -291,7 +360,7 @@ class Stickman {
         this.root.rotation.set(0, this.facing > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
     }
 
-    // World position helpers for accurate 3D hitboxes & swing trails
+    // World position helpers for accurate 3D hitboxes
     getLeftHandWorldPos() {
         const v = new THREE.Vector3();
         this.leftArm.hand.getWorldPosition(v);
@@ -328,56 +397,139 @@ class Stickman {
         return v;
     }
 
-    // Request next combo punch (J): Left Jab -> Right Cross -> Electric Uppercut
-    requestPunchCombo() {
-        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'KO') {
-            return false;
+    // Crouch / Duck control
+    setCrouch(isCrouching, isBlockingBack = false) {
+        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN' || this.animState === 'KO' || this.animState === 'ATTACK' || this.animState === 'DASH') {
+            return;
         }
 
-        // If already in an attack, buffer the next punch step if after early windup!
-        if (this.animState === 'ATTACK') {
-            if (this.attackTimer > 0.06 && !this.queuedAttack) {
-                const nextStep = (this.punchComboStep % 3) + 1;
-                this.punchComboStep = nextStep;
-                this.queuedAttack = `PUNCH_${nextStep}`;
-                return true;
-            }
-            return false;
-        }
+        this.isCrouching = isCrouching;
+        this.isCrouchBlocking = isCrouching && isBlockingBack;
 
-        this.punchComboStep = (this.punchComboStep % 3) + 1;
-        this.kickComboStep = 0;
-        return this.triggerAttack(`PUNCH_${this.punchComboStep}`);
+        if (isCrouching) {
+            this.isBlocking = false;
+            this.animState = this.isCrouchBlocking ? 'CROUCH_BLOCK' : 'CROUCH';
+        } else if (this.animState === 'CROUCH' || this.animState === 'CROUCH_BLOCK') {
+            this.animState = 'IDLE';
+            this.isCrouchBlocking = false;
+        }
     }
 
-    // Request next combo kick (K): Left Roundhouse -> Right Heavy Kick -> 360 Tornado Kick
-    requestKickCombo() {
-        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'KO') {
+    // Unified Tekken Input Command Processor
+    // Supports LP, RP, LK, RK, DOWN_LK, UPPERCUT, THROW, SPECIAL
+    requestTekkenCommand(cmd, opponent = null) {
+        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN' || this.animState === 'KO') {
             return false;
         }
 
-        if (!this.isGrounded) {
+        // 1. Throws / Grappling (Unblockable standing throw)
+        if (cmd === 'THROW') {
+            if (!this.isGrounded) return false;
+            // Check throw proximity to opponent
+            if (opponent) {
+                const dist = Math.abs(this.position.x - opponent.position.x);
+                const oppSt = opponent.animState;
+                const canBeThrown = (dist < 1.72 && oppSt !== 'CROUCH' && oppSt !== 'CROUCH_BLOCK' && oppSt !== 'KNOCKDOWN' && oppSt !== 'GETUP' && oppSt !== 'THROWN' && oppSt !== 'KO' && opponent.isGrounded && !opponent.isInvulnerable);
+                if (canBeThrown) {
+                    this.executeThrowOn(opponent);
+                    return true;
+                }
+            }
+            // Whiff throw attempt
+            return this.triggerAttack('THROW_ATTEMPT');
+        }
+
+        // 2. Air Kick
+        if (!this.isGrounded && (cmd === 'LK' || cmd === 'RK' || cmd === 'KICK')) {
             return this.triggerAttack('AIR_KICK');
         }
 
+        // 3. Crouching Modifiers
+        if (this.isCrouching) {
+            if (cmd === 'RP') return this.triggerAttack('UPPERCUT');
+            if (cmd === 'LK') return this.triggerAttack('DOWN_LK');
+        }
+
+        // 4. Input Buffering during active strike
         if (this.animState === 'ATTACK') {
-            if (this.attackTimer > 0.06 && !this.queuedAttack) {
-                const nextStep = (this.kickComboStep % 3) + 1;
-                this.kickComboStep = nextStep;
-                this.queuedAttack = `KICK_${nextStep}`;
-                return true;
+            if (this.attackTimer > 0.05 && !this.queuedAttack) {
+                let nextMove = null;
+                const cur = this.attackType;
+
+                // Branching Tekken combos:
+                if (cur === 'LP' || cur === 'PUNCH_1') {
+                    if (cmd === 'LP' || cmd === 'PUNCH') nextMove = 'LP_2';
+                    else if (cmd === 'RP') nextMove = 'RP'; // 1-2 string
+                    else if (cmd === 'RK') nextMove = 'RK'; // 1-4 string
+                } else if (cur === 'LP_2') {
+                    if (cmd === 'RP' || cmd === 'LP' || cmd === 'PUNCH') nextMove = '1_1_2_FINISHER'; // iconic 1-1-2 Mishima!
+                } else if (cur === 'RP' || cur === 'PUNCH_2') {
+                    if (cmd === 'RP' || cmd === 'PUNCH') nextMove = '1_1_2_FINISHER';
+                    else if (cmd === 'LK' || cmd === 'KICK') nextMove = 'LK';
+                    else if (cmd === 'RK') nextMove = '3_3_4_FINISHER';
+                } else if (cur === 'LK' || cur === 'KICK_1') {
+                    if (cmd === 'LK' || cmd === 'KICK') nextMove = 'DOWN_LK'; // 3-3 low sweep
+                    else if (cmd === 'RK') nextMove = 'RK'; // 3-4 Demon Axle
+                } else if (cur === 'DOWN_LK' || cur === 'KICK_2') {
+                    if (cmd === 'RK' || cmd === 'LK' || cmd === 'KICK') nextMove = '3_3_4_FINISHER'; // 3-3-4 finisher
+                } else if (cur === 'RK') {
+                    if (cmd === 'LK' || cmd === 'KICK') nextMove = 'LK'; // 4-3 combo
+                }
+
+                if (nextMove) {
+                    this.queuedAttack = nextMove;
+                    return true;
+                }
             }
             return false;
         }
 
-        this.kickComboStep = (this.kickComboStep % 3) + 1;
-        this.punchComboStep = 0;
-        return this.triggerAttack(`KICK_${this.kickComboStep}`);
+        // 5. Fresh attack execution
+        let targetAttack = cmd;
+        if (cmd === 'LP' || cmd === 'PUNCH') targetAttack = 'LP';
+        else if (cmd === 'RP') targetAttack = 'RP';
+        else if (cmd === 'LK' || cmd === 'KICK') targetAttack = 'LK';
+        else if (cmd === 'RK') targetAttack = 'RK';
+
+        return this.triggerAttack(targetAttack);
+    }
+
+    // Backward compatibility helpers for mashing
+    requestPunchCombo() {
+        return this.requestTekkenCommand('LP');
+    }
+
+    requestKickCombo() {
+        return this.requestTekkenCommand('LK');
+    }
+
+    // Execute Throw Sequence on Target
+    executeThrowOn(victim) {
+        this.isBlocking = false;
+        this.animState = 'ATTACK';
+        this.attackType = 'THROW_SLAM';
+        this.attackDuration = 0.84;
+        this.attackTimer = 0;
+        this.attackPhase = 1;
+        this.hitRegistered = false;
+        this.throwVictim = victim;
+
+        victim.animState = 'THROWN';
+        victim.attackType = null;
+        victim.queuedAttack = null;
+        victim.isBlocking = false;
+        victim.isInvulnerable = true;
+        victim.invulnerableTimer = 0.95;
+        victim.throwAttacker = this;
+        victim.animTime = 0;
+
+        window.soundEngine.playThrowGrab();
+        this.vfx.spawnHitSparks(this.getChestWorldPos(), 0x00f0ff, 12, 1.0);
     }
 
     // Execute a specific attack move immediately
     triggerAttack(type, isComboChain = false) {
-        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'KO') {
+        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN' || this.animState === 'KO') {
             return false;
         }
         if (!isComboChain && this.animState === 'ATTACK' && this.attackPhase < 2) {
@@ -390,6 +542,8 @@ class Stickman {
         }
 
         this.isBlocking = false;
+        this.isCrouching = false;
+        this.isCrouchBlocking = false;
         this.animState = 'ATTACK';
         this.attackType = type;
         this.attackPhase = 0;
@@ -399,45 +553,82 @@ class Stickman {
         this.trailTimer = 0;
 
         switch (type) {
-            case 'PUNCH_1': // 1. Left Snapping Jab
+            case 'LP':
+            case 'PUNCH_1': // Left Snapping Jab (High)
+                this.attackDuration = 0.24;
+                if (this.isGrounded) this.velocity.x = this.facing * 3.2;
+                window.soundEngine.playPunchSwing();
+                break;
+
+            case 'LP_2': // Second Jab in 1-1-2 (High)
+                this.attackDuration = 0.25;
+                if (this.isGrounded) this.velocity.x = this.facing * 3.6;
+                window.soundEngine.playPunchSwing();
+                break;
+
+            case 'RP':
+            case 'PUNCH_2': // Right Straight Cross (Mid)
                 this.attackDuration = 0.28;
-                if (this.isGrounded) this.velocity.x = this.facing * 3.5;
+                if (this.isGrounded) this.velocity.x = this.facing * 4.4;
                 window.soundEngine.playPunchSwing();
                 break;
-            case 'PUNCH_2': // 2. Right Power Cross
+
+            case '1_1_2_FINISHER':
+            case 'PUNCH_3': // Demon Lunge Finisher (Mid)
+                this.attackDuration = 0.40;
+                if (this.isGrounded) this.velocity.x = this.facing * 6.5;
+                window.soundEngine.playPunchSwing();
+                break;
+
+            case 'LK':
+            case 'KICK_1': // Left Mid Roundhouse Kick (Mid)
                 this.attackDuration = 0.32;
-                if (this.isGrounded) this.velocity.x = this.facing * 4.5;
-                window.soundEngine.playPunchSwing();
-                break;
-            case 'PUNCH_3': // 3. Tekken Electric Dragon Uppercut!
-                this.attackDuration = 0.44;
-                if (this.isGrounded) this.velocity.x = this.facing * 6.0;
-                window.soundEngine.playPunchSwing();
-                break;
-            case 'KICK_1': // 1. Left High Roundhouse Kick
-                this.attackDuration = 0.34;
                 if (this.isGrounded) this.velocity.x = this.facing * 3.8;
                 window.soundEngine.playKickSwing();
                 break;
-            case 'KICK_2': // 2. Right Heavy Thrust Kick
-                this.attackDuration = 0.38;
-                if (this.isGrounded) this.velocity.x = this.facing * 4.8;
+
+            case 'RK':
+            case 'KICK_2': // Right High Crescent Cutter (High)
+                this.attackDuration = 0.34;
+                if (this.isGrounded) this.velocity.x = this.facing * 4.6;
                 window.soundEngine.playKickSwing();
                 break;
-            case 'KICK_3': // 3. 360° Tornado Jumping Spin Kick!
+
+            case 'DOWN_LK': // Dragon Hell Sweep (Low)
+                this.attackDuration = 0.36;
+                if (this.isGrounded) this.velocity.x = this.facing * 4.2;
+                window.soundEngine.playKickSwing();
+                break;
+
+            case 'UPPERCUT': // Electric Wind God Fist (Mid Launcher!)
+                this.attackDuration = 0.44;
+                if (this.isGrounded) this.velocity.x = this.facing * 5.8;
+                window.soundEngine.playPunchSwing();
+                break;
+
+            case '3_3_4_FINISHER':
+            case 'KICK_3': // 360 Tornado Jump Kick (Mid)
                 this.attackDuration = 0.52;
                 if (this.isGrounded) {
                     this.velocity.x = this.facing * 7.2;
-                    this.velocity.y = 6.5; // short acrobatic hop!
+                    this.velocity.y = 6.5;
                     this.isGrounded = false;
                 }
                 window.soundEngine.playKickSwing();
                 break;
+
             case 'AIR_KICK':
                 this.attackDuration = 0.38;
                 this.velocity.x = this.facing * 8.5;
                 window.soundEngine.playKickSwing();
                 break;
+
+            case 'THROW_ATTEMPT':
+                this.attackDuration = 0.35;
+                if (this.isGrounded) this.velocity.x = this.facing * 2.0;
+                window.soundEngine.playPunchSwing();
+                break;
+
             case 'SPECIAL':
                 this.attackDuration = 0.52;
                 this.queuedAttack = null;
@@ -449,10 +640,11 @@ class Stickman {
     }
 
     triggerDash(direction) {
-        if (this.dashCooldown > 0 || this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'KO') {
+        if (this.dashCooldown > 0 || this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN' || this.animState === 'KO') {
             return false;
         }
         this.isBlocking = false;
+        this.isCrouching = false;
         this.queuedAttack = null;
         this.animState = 'DASH';
         this.animTime = 0;
@@ -469,10 +661,11 @@ class Stickman {
     }
 
     triggerJump() {
-        if (!this.isGrounded || this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'KO') {
+        if (!this.isGrounded || this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN' || this.animState === 'KO') {
             return false;
         }
         this.isBlocking = false;
+        this.isCrouching = false;
         this.queuedAttack = null;
         this.velocity.y = this.jumpForce;
         this.isGrounded = false;
@@ -484,25 +677,35 @@ class Stickman {
     }
 
     setBlock(isBlocking) {
-        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'KO') {
+        if (this.animState === 'HURT' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN' || this.animState === 'KO') {
             this.isBlocking = false;
             return;
         }
         this.isBlocking = isBlocking;
-        if (isBlocking && this.animState !== 'ATTACK' && this.animState !== 'DASH') {
+        if (isBlocking && this.animState !== 'ATTACK' && this.animState !== 'DASH' && !this.isCrouching) {
             this.animState = 'BLOCK';
         } else if (!isBlocking && this.animState === 'BLOCK') {
             this.animState = 'IDLE';
         }
     }
 
-    takeDamage(amount, knockbackX = 0, knockbackY = 0, isHeavy = false, attacker = null) {
-        if (this.isInvulnerable || this.animState === 'KO' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP') {
+    takeDamage(amount, knockbackX = 0, knockbackY = 0, isHeavy = false, attacker = null, hitLevel = 'MID') {
+        if (this.isInvulnerable || this.animState === 'KO' || this.animState === 'KNOCKDOWN' || this.animState === 'GETUP' || this.animState === 'THROWN') {
             return false;
+        }
+
+        // TEKKEN HIT LEVEL EVALUATION:
+        // 1. HIGH attack: Whiffs completely if victim is ducking/crouching!
+        if (hitLevel === 'HIGH') {
+            if (this.animState === 'CROUCH' || this.animState === 'CROUCH_BLOCK') {
+                this.vfx.spawnDamageNumber(this.getHeadWorldPos(), 'DUCK!', 'blocked');
+                return false;
+            }
         }
 
         let finalDamage = amount;
         let blocked = false;
+        let counterHit = false;
         this.queuedAttack = null;
 
         if (attacker) {
@@ -510,7 +713,45 @@ class Stickman {
             this.setFacing(dirToAttacker);
         }
 
-        if (this.isBlocking) {
+        // 2. LOW attack: Bypasses standing guard! Blocked ONLY by crouch-guard
+        if (hitLevel === 'LOW') {
+            if (this.animState === 'CROUCH_BLOCK') {
+                blocked = true;
+                finalDamage = Math.max(1, Math.round(amount * 0.2));
+                knockbackX *= 0.2;
+                knockbackY = 0;
+                window.soundEngine.playBlock();
+                this.vfx.spawnHitSparks(this.getLeftFootWorldPos(), 0x00f0ff, 8, 0.7);
+                this.vfx.spawnDamageNumber(this.getChestWorldPos(), `LOW GUARD -${finalDamage}`, 'blocked');
+                this.vfx.triggerShake(0.1);
+            } else {
+                blocked = false;
+                finalDamage = Math.round(amount * 1.15);
+                knockbackX = (knockbackX || attacker.facing * 3.2);
+                knockbackY = 1.8; // Low trip
+            }
+        }
+        // 3. MID attack: Penetrates crouch (Crushes ducking opponent!)
+        else if (hitLevel === 'MID') {
+            if (this.isBlocking && (this.animState === 'BLOCK' || this.animState === 'IDLE' || this.animState === 'RUN')) {
+                blocked = true;
+                finalDamage = Math.max(1, Math.round(amount * 0.2));
+                knockbackX *= 0.2;
+                knockbackY = 0;
+                window.soundEngine.playBlock();
+                this.vfx.spawnHitSparks(this.getChestWorldPos(), 0x00f0ff, 8, 0.7);
+                this.vfx.spawnDamageNumber(this.getChestWorldPos(), `GUARD -${finalDamage}`, 'blocked');
+                this.vfx.triggerShake(0.1);
+            } else if (this.animState === 'CROUCH' || this.animState === 'CROUCH_BLOCK') {
+                counterHit = true;
+                finalDamage = Math.round(amount * 1.25);
+                knockbackX *= 1.3;
+                knockbackY = Math.max(knockbackY, 3.8);
+                this.vfx.spawnDamageNumber(this.getChestWorldPos(), `MID CRUSH -${finalDamage}`, 'crit');
+            }
+        }
+        // 4. HIGH attack on standing guard:
+        else if (this.isBlocking) {
             blocked = true;
             finalDamage = Math.max(1, Math.round(amount * 0.2));
             knockbackX *= 0.2;
@@ -519,8 +760,10 @@ class Stickman {
             this.vfx.spawnHitSparks(this.getChestWorldPos(), 0x00f0ff, 8, 0.7);
             this.vfx.spawnDamageNumber(this.getChestWorldPos(), `GUARD -${finalDamage}`, 'blocked');
             this.vfx.triggerShake(0.1);
-        } else {
-            if (isHeavy) {
+        }
+
+        if (!blocked) {
+            if (isHeavy || counterHit) {
                 window.soundEngine.playKickHit();
                 this.vfx.triggerShake(0.42);
             } else {
@@ -528,10 +771,12 @@ class Stickman {
                 this.vfx.triggerShake(0.18);
             }
 
-            const hitPos = this.getChestWorldPos();
-            this.vfx.spawnHitSparks(hitPos, 0xffea00, isHeavy ? 20 : 11, isHeavy ? 1.35 : 1.0);
-            this.vfx.spawnShockwave(hitPos, isHeavy ? 0xffea00 : 0xffffff, isHeavy ? 2.3 : 1.3);
-            this.vfx.spawnDamageNumber(hitPos, `-${finalDamage}`, isHeavy ? 'crit' : 'normal');
+            const hitPos = (hitLevel === 'LOW') ? this.getLeftFootWorldPos() : (hitLevel === 'HIGH' ? this.getHeadWorldPos() : this.getChestWorldPos());
+            this.vfx.spawnHitSparks(hitPos, 0xffea00, (isHeavy || counterHit) ? 20 : 11, (isHeavy || counterHit) ? 1.35 : 1.0);
+            this.vfx.spawnShockwave(hitPos, (isHeavy || counterHit) ? 0xffea00 : 0xffffff, (isHeavy || counterHit) ? 2.3 : 1.3);
+            if (!counterHit) {
+                this.vfx.spawnDamageNumber(hitPos, `-${finalDamage}`, isHeavy ? 'crit' : 'normal');
+            }
         }
 
         this.health = Math.max(0, this.health - finalDamage);
@@ -550,7 +795,7 @@ class Stickman {
 
         if (!blocked) {
             this.attackType = null;
-            if (isHeavy && (Math.abs(knockbackX) >= 9 || knockbackY >= 5)) {
+            if ((isHeavy || counterHit) && (Math.abs(knockbackX) >= 8 || knockbackY >= 4.5)) {
                 this.animState = 'KNOCKDOWN';
                 this.animTime = 0;
             } else {
@@ -564,6 +809,7 @@ class Stickman {
 
     triggerKO() {
         this.isBlocking = false;
+        this.isCrouching = false;
         this.attackType = null;
         this.queuedAttack = null;
         this.animState = 'KO';
@@ -586,12 +832,16 @@ class Stickman {
         this.velocity.set(0, 0, 0);
         this.isGrounded = true;
         this.isBlocking = false;
+        this.isCrouching = false;
+        this.isCrouchBlocking = false;
         this.isInvulnerable = false;
         this.invulnerableTimer = 0;
         this.dashTimer = 0;
         this.dashCooldown = 0;
         this.attackType = null;
         this.queuedAttack = null;
+        this.throwVictim = null;
+        this.throwAttacker = null;
         this.punchComboStep = 0;
         this.kickComboStep = 0;
         this.animState = 'IDLE';
@@ -620,7 +870,6 @@ class Stickman {
         this.rightLeg.knee.rotation.set(0, 0, 0);
     }
 
-    // Apply an interpolated pose dictionary to the skeleton
     applyBlendedPose(poseA, poseB, t) {
         const lerp = THREE.MathUtils.lerp;
         const lerpArr = (a, b, f) => [lerp(a[0], b[0], f), lerp(a[1], b[1], f), lerp(a[2], b[2], f)];
@@ -643,11 +892,6 @@ class Stickman {
         this.rightLeg.knee.rotation.set(lerp(poseA.rKnee, poseB.rKnee, t), 0, 0);
     }
 
-    // Tekken 3-Phase Attack Curve:
-    // 0.00 -> 0.20: Guard to Chamber (Coil)
-    // 0.20 -> 0.40: Explosive Snap from Chamber to Full Strike Extension
-    // 0.40 -> 0.62: Impact Hold (Crisp Silhouette Lock!)
-    // 0.62 -> 1.00: Smooth Return to Fighting Guard
     applyThreePhaseStrike(p, chamberPose, strikePose) {
         if (p < 0.20) {
             const f = p / 0.20;
@@ -655,11 +899,9 @@ class Stickman {
             this.applyBlendedPose(this.GUARD_POSE, chamberPose, ease);
         } else if (p < 0.40) {
             const f = (p - 0.20) / 0.20;
-            // Fast explosive snap (quartic ease-out)
             const snap = 1 - Math.pow(1 - f, 4);
             this.applyBlendedPose(chamberPose, strikePose, snap);
         } else if (p < 0.62) {
-            // Hold peak extension with subtle breathing tension
             this.applyBlendedPose(strikePose, strikePose, 1.0);
         } else {
             const f = (p - 0.62) / 0.38;
@@ -707,43 +949,46 @@ class Stickman {
             }
         }
 
-        if (!this.isGrounded) {
-            this.velocity.y += this.gravity * delta;
-        }
-
-        this.position.x += this.velocity.x * delta;
-        this.position.y += this.velocity.y * delta;
-
-        if (this.position.y <= 0) {
-            const wasAirborne = !this.isGrounded && this.velocity.y < -4.0;
-            this.position.y = 0;
-            this.velocity.y = 0;
-            this.isGrounded = true;
-
-            if (wasAirborne) {
-                this.vfx.spawnGroundDust(this.position, 4);
+        // If currently being thrown, position is driven by throw arc, skip normal physics
+        if (this.animState !== 'THROWN') {
+            if (!this.isGrounded) {
+                this.velocity.y += this.gravity * delta;
             }
 
-            if (this.animState === 'JUMP' || (this.animState === 'ATTACK' && this.attackType === 'AIR_KICK')) {
-                this.animState = 'IDLE';
-                this.attackType = null;
+            this.position.x += this.velocity.x * delta;
+            this.position.y += this.velocity.y * delta;
+
+            if (this.position.y <= 0) {
+                const wasAirborne = !this.isGrounded && this.velocity.y < -4.0;
+                this.position.y = 0;
+                this.velocity.y = 0;
+                this.isGrounded = true;
+
+                if (wasAirborne) {
+                    this.vfx.spawnGroundDust(this.position, 4);
+                }
+
+                if (this.animState === 'JUMP' || (this.animState === 'ATTACK' && this.attackType === 'AIR_KICK')) {
+                    this.animState = 'IDLE';
+                    this.attackType = null;
+                }
             }
-        }
 
-        if (this.position.x > arenaBounds) {
-            this.position.x = arenaBounds;
-            this.velocity.x = 0;
-        } else if (this.position.x < -arenaBounds) {
-            this.position.x = -arenaBounds;
-            this.velocity.x = 0;
-        }
+            if (this.position.x > arenaBounds) {
+                this.position.x = arenaBounds;
+                this.velocity.x = 0;
+            } else if (this.position.x < -arenaBounds) {
+                this.position.x = -arenaBounds;
+                this.velocity.x = 0;
+            }
 
-        if (this.animState !== 'DASH') {
-            if (this.isGrounded) {
-                this.velocity.x *= Math.pow(0.0005, delta);
-                if (Math.abs(this.velocity.x) < 0.05) this.velocity.x = 0;
-            } else {
-                this.velocity.x *= Math.pow(0.35, delta);
+            if (this.animState !== 'DASH') {
+                if (this.isGrounded) {
+                    this.velocity.x *= Math.pow(0.0005, delta);
+                    if (Math.abs(this.velocity.x) < 0.05) this.velocity.x = 0;
+                } else {
+                    this.velocity.x *= Math.pow(0.35, delta);
+                }
             }
         }
 
@@ -781,6 +1026,20 @@ class Stickman {
                 this.rightArm.shoulder.rotation.x -= bounce * 0.7;
                 this.leftLeg.knee.rotation.x += bounce * 1.4;
                 this.rightLeg.knee.rotation.x += bounce * 1.4;
+                break;
+            }
+
+            case 'CROUCH': {
+                this.applyBlendedPose(this.CROUCH_POSE, this.CROUCH_POSE, 1.0);
+                const breathe = Math.sin(t * 6.5) * 0.015;
+                this.hips.position.y += breathe;
+                break;
+            }
+
+            case 'CROUCH_BLOCK': {
+                this.applyBlendedPose(this.CROUCH_BLOCK_POSE, this.CROUCH_BLOCK_POSE, 1.0);
+                const breathe = Math.sin(t * 6.5) * 0.015;
+                this.hips.position.y += breathe;
                 break;
             }
 
@@ -864,6 +1123,25 @@ class Stickman {
 
             case 'ATTACK': {
                 this.updateAttackAnimation(delta);
+                break;
+            }
+
+            case 'THROWN': {
+                const thrownPose = {
+                    hipsY: 0.85,
+                    hips: [-0.35, 0, 0],
+                    spine: [-0.45, 0, 0],
+                    neck: [0.35, 0, 0],
+                    lShoulder: [0.65, 0.3, 0.4],
+                    lElbow: -0.6,
+                    rShoulder: [0.65, -0.3, -0.4],
+                    rElbow: -0.6,
+                    lHip: [-0.4, 0, 0.2],
+                    lKnee: 0.6,
+                    rHip: [-0.2, 0, -0.2],
+                    rKnee: 0.4
+                };
+                this.applyBlendedPose(thrownPose, thrownPose, 1.0);
                 break;
             }
 
@@ -974,13 +1252,12 @@ class Stickman {
         }
     }
 
-    // Tekken 8 Martial Arts Attack Choreography
+    // Tekken 8 Martial Arts Attack Choreography & Keyframes
     updateAttackAnimation(delta) {
         this.attackTimer += delta;
         this.trailTimer += delta;
         const p = Math.min(1.0, this.attackTimer / this.attackDuration);
 
-        // Phases: 0 = Chamber (0-20%), 1 = Active Strike & Hold (20-65%), 2 = Recovery (65-100%)
         if (p < 0.20) {
             this.attackPhase = 0;
         } else if (p < 0.65) {
@@ -989,7 +1266,7 @@ class Stickman {
             this.attackPhase = 2;
         }
 
-        // Check Buffered Combo Chain right after peak strike hold (p >= 0.58)!
+        // Check Buffered Combo Chain right after strike hold
         if (p >= 0.58 && this.queuedAttack) {
             const nextMove = this.queuedAttack;
             this.queuedAttack = null;
@@ -998,17 +1275,18 @@ class Stickman {
         }
 
         switch (this.attackType) {
-            // =========================================================================
-            // 3-HIT PUNCH COMBO: 1. Left Jab -> 2. Right Cross -> 3. Electric Uppercut
-            // =========================================================================
+            // -----------------------------------------------------------------
+            // LP: Left Snapping Jab (High, 10-Frame Fast Lead Strike)
+            // -----------------------------------------------------------------
+            case 'LP':
             case 'PUNCH_1': {
                 const chamber = {
                     hipsY: 0.88,
                     hips: [0, -0.35, 0],
-                    spine: [0.06, -0.15, 0],
-                    neck: [-0.04, 0.15, 0],
-                    lShoulder: [-0.45, 0.25, 0.25],
-                    lElbow: -2.05, // tightly chambered at left cheek/rib
+                    spine: [0.06, -0.18, 0],
+                    neck: [-0.04, 0.18, 0],
+                    lShoulder: [-0.50, 0.25, 0.25],
+                    lElbow: -2.05,
                     rShoulder: [-0.65, -0.25, -0.20],
                     rElbow: -1.85,
                     lHip: [-0.42, 0.1, 0.08],
@@ -1018,12 +1296,12 @@ class Stickman {
                 };
                 const strike = {
                     hipsY: 0.85,
-                    hips: [0, 0.22, 0],
-                    spine: [0.20, 0.65, 0], // left shoulder whips forward!
-                    neck: [-0.14, -0.55, 0], // eyes stay locked forward!
-                    lShoulder: [-1.58, -0.20, 0.0], // straight horizontal jab extension!
-                    lElbow: -0.04, // elbow snaps straight!
-                    rShoulder: [-0.55, -0.30, -0.25], // right hand guards jaw
+                    hips: [0, 0.28, 0],
+                    spine: [0.22, 0.70, 0],
+                    neck: [-0.15, -0.58, 0],
+                    lShoulder: [-1.62, -0.20, 0.0],
+                    lElbow: -0.04,
+                    rShoulder: [-0.55, -0.30, -0.25],
                     rElbow: -1.95,
                     lHip: [-0.65, 0.1, 0.08],
                     lKnee: 0.82,
@@ -1031,22 +1309,66 @@ class Stickman {
                     rKnee: 0.22
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
-                if (this.attackPhase === 1 && this.trailTimer >= 0.025) {
+                if (this.attackPhase === 1 && this.trailTimer >= 0.024) {
                     this.trailTimer = 0;
                     this.vfx.spawnStrikeTrail(this.getLeftHandWorldPos(), this.accentColor, 1.4);
                 }
                 break;
             }
 
+            // -----------------------------------------------------------------
+            // LP_2: Second Snappy Left Flick in 1-1-2 String (High)
+            // -----------------------------------------------------------------
+            case 'LP_2': {
+                const chamber = {
+                    hipsY: 0.87,
+                    hips: [0, -0.20, 0],
+                    spine: [0.08, 0.10, 0],
+                    neck: [-0.05, -0.10, 0],
+                    lShoulder: [-0.95, 0.15, 0.20],
+                    lElbow: -1.65,
+                    rShoulder: [-0.60, -0.25, -0.20],
+                    rElbow: -1.85,
+                    lHip: [-0.50, 0.1, 0.08],
+                    lKnee: 0.68,
+                    rHip: [0.35, -0.1, -0.08],
+                    rKnee: 0.30
+                };
+                const strike = {
+                    hipsY: 0.85,
+                    hips: [0, 0.32, 0],
+                    spine: [0.24, 0.75, 0],
+                    neck: [-0.16, -0.62, 0],
+                    lShoulder: [-1.65, -0.18, 0.0],
+                    lElbow: -0.02,
+                    rShoulder: [-0.58, -0.30, -0.25],
+                    rElbow: -1.95,
+                    lHip: [-0.68, 0.1, 0.08],
+                    lKnee: 0.85,
+                    rHip: [0.48, -0.1, -0.08],
+                    rKnee: 0.20
+                };
+                this.applyThreePhaseStrike(p, chamber, strike);
+                if (this.attackPhase === 1 && this.trailTimer >= 0.024) {
+                    this.trailTimer = 0;
+                    this.vfx.spawnStrikeTrail(this.getLeftHandWorldPos(), this.accentColor, 1.5);
+                }
+                break;
+            }
+
+            // -----------------------------------------------------------------
+            // RP: Right Power Straight Cross (Mid)
+            // -----------------------------------------------------------------
+            case 'RP':
             case 'PUNCH_2': {
                 const chamber = {
                     hipsY: 0.86,
                     hips: [0, 0.38, 0],
                     spine: [0.10, 0.52, 0],
                     neck: [-0.06, -0.45, 0],
-                    lShoulder: [-1.15, 0, 0.15], // lead hand retracting from jab
+                    lShoulder: [-1.15, 0, 0.15],
                     lElbow: -0.75,
-                    rShoulder: [0.22, -0.30, -0.35], // right fist cocked way back!
+                    rShoulder: [0.22, -0.30, -0.35],
                     rElbow: -2.05,
                     lHip: [-0.55, 0.1, 0.08],
                     lKnee: 0.72,
@@ -1055,12 +1377,12 @@ class Stickman {
                 };
                 const strike = {
                     hipsY: 0.82,
-                    hips: [0, -0.45, 0], // deep hip pivot!
-                    spine: [0.28, -0.78, 0], // right shoulder drives through target!
-                    neck: [-0.18, 0.68, 0],
-                    lShoulder: [-0.55, 0.28, 0.28], // left hand tucked to cheek guard
+                    hips: [0, -0.48, 0],
+                    spine: [0.28, -0.80, 0],
+                    neck: [-0.18, 0.70, 0],
+                    lShoulder: [-0.55, 0.28, 0.28],
                     lElbow: -1.95,
-                    rShoulder: [-1.62, 0.22, 0.0], // full power right cross extension!
+                    rShoulder: [-1.65, 0.22, 0.0],
                     rElbow: -0.04,
                     lHip: [-0.75, 0, 0.08],
                     lKnee: 0.95,
@@ -1075,51 +1397,96 @@ class Stickman {
                 break;
             }
 
-            case 'PUNCH_3': {
-                // Tekken Electric Wind God Fist (Crouch Wave-Dash -> Sky-Ripping Uppercut!)
+            // -----------------------------------------------------------------
+            // 1-1-2 FINISHER: Demon Lunge Straight Cross (Mid Knockback)
+            // -----------------------------------------------------------------
+            case '1_1_2_FINISHER': {
                 const chamber = {
-                    hipsY: 0.68, // deep Mishima crouch!
-                    hips: [0.15, 0.45, 0],
-                    spine: [0.45, 0.65, 0], // torso coiled low & forward
-                    neck: [-0.35, -0.55, 0],
+                    hipsY: 0.78,
+                    hips: [0, 0.45, 0],
+                    spine: [0.25, 0.60, 0],
+                    neck: [-0.15, -0.50, 0],
+                    lShoulder: [-0.45, 0.35, 0.35],
+                    lElbow: -1.85,
+                    rShoulder: [0.35, -0.30, -0.40],
+                    rElbow: -2.15,
+                    lHip: [-0.75, 0, 0.1],
+                    lKnee: 1.15,
+                    rHip: [0.55, 0, -0.1],
+                    rKnee: 0.50
+                };
+                const strike = {
+                    hipsY: 0.75,
+                    hips: [0, -0.65, 0],
+                    spine: [0.38, -0.95, 0],
+                    neck: [-0.22, 0.85, 0],
+                    lShoulder: [-0.45, 0.35, 0.35],
+                    lElbow: -1.85,
+                    rShoulder: [-1.78, 0.25, 0.0],
+                    rElbow: -0.02,
+                    lHip: [-0.95, 0, 0.08],
+                    lKnee: 1.25,
+                    rHip: [0.72, 0, -0.08],
+                    rKnee: 0.12
+                };
+                this.applyThreePhaseStrike(p, chamber, strike);
+                if (this.attackPhase === 1 && this.trailTimer >= 0.018) {
+                    this.trailTimer = 0;
+                    const rHand = this.getRightHandWorldPos();
+                    this.vfx.spawnStrikeTrail(rHand, 0xffea00, 2.0);
+                    this.vfx.spawnHitSparks(rHand, this.accentColor, 1, 0.5);
+                }
+                break;
+            }
+
+            // -----------------------------------------------------------------
+            // UPPERCUT: Electric Wind God Fist (Mid Sky Launcher!)
+            // -----------------------------------------------------------------
+            case 'UPPERCUT':
+            case 'PUNCH_3': {
+                const chamber = {
+                    hipsY: 0.65,
+                    hips: [0.18, 0.48, 0],
+                    spine: [0.48, 0.68, 0],
+                    neck: [-0.38, -0.58, 0],
                     lShoulder: [-0.35, 0.35, 0.40],
                     lElbow: -1.45,
-                    rShoulder: [0.38, -0.25, -0.35], // right arm loaded low at hip!
-                    rElbow: -1.75,
+                    rShoulder: [0.42, -0.25, -0.35],
+                    rElbow: -1.85,
                     lHip: [-0.95, 0, 0.1],
                     lKnee: 1.45,
                     rHip: [0.35, 0, -0.1],
                     rKnee: 1.15
                 };
                 const strike = {
-                    hipsY: 1.06, // explosive upward rise!
-                    hips: [-0.12, -0.52, 0],
-                    spine: [-0.28, -0.78, 0], // chest arches skyward!
-                    neck: [0.15, 0.60, 0],
-                    lShoulder: [0.42, 0.2, 0.48], // left arm counter-pulled back
+                    hipsY: 1.08,
+                    hips: [-0.15, -0.55, 0],
+                    spine: [-0.30, -0.80, 0],
+                    neck: [0.18, 0.65, 0],
+                    lShoulder: [0.42, 0.2, 0.48],
                     lElbow: -1.55,
-                    rShoulder: [-2.35, 0.18, -0.08], // right fist rips high overhead!
-                    rElbow: -0.52, // classic bent-arm uppercut lock!
+                    rShoulder: [-2.38, 0.18, -0.08],
+                    rElbow: -0.50,
                     lHip: [-0.22, 0, 0.08],
                     lKnee: 0.30,
-                    rHip: [-0.88, 0, -0.08], // rising right knee drive!
+                    rHip: [-0.92, 0, -0.08],
                     rKnee: 1.35
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
                 if (this.attackPhase === 1 && this.trailTimer >= 0.018) {
                     this.trailTimer = 0;
                     const rHand = this.getRightHandWorldPos();
-                    this.vfx.spawnStrikeTrail(rHand, 0xffea00, 2.1);
-                    this.vfx.spawnHitSparks(rHand, this.accentColor, 1, 0.6);
+                    this.vfx.spawnStrikeTrail(rHand, 0xffea00, 2.2);
+                    this.vfx.spawnHitSparks(rHand, this.accentColor, 2, 0.7);
                 }
                 break;
             }
 
-            // =========================================================================
-            // 3-HIT KICK COMBO: 1. Left High Kick -> 2. Right Heavy Kick -> 3. 360 Tornado Kick
-            // =========================================================================
+            // -----------------------------------------------------------------
+            // LK: Left Mid Body Roundhouse Kick (Mid)
+            // -----------------------------------------------------------------
+            case 'LK':
             case 'KICK_1': {
-                // 1. Left High Roundhouse Kick (Kaki Kiri)
                 const chamber = {
                     hipsY: 0.90,
                     hips: [-0.10, -0.25, 0],
@@ -1129,22 +1496,22 @@ class Stickman {
                     lElbow: -1.65,
                     rShoulder: [-0.70, -0.2, -0.3],
                     rElbow: -1.75,
-                    lHip: [-1.45, 0.25, 0.35], // left knee lifted high & chambered!
-                    lKnee: 1.68, // tightly folded knee before snap!
+                    lHip: [-1.45, 0.25, 0.35],
+                    lKnee: 1.68,
                     rHip: [0.05, 0, 0],
                     rKnee: 0.25
                 };
                 const strike = {
-                    hipsY: 0.92,
-                    hips: [-0.28, 0.55, -0.18], // hips whip around & tilt!
-                    spine: [-0.34, 0.35, 0.12], // torso leans back to counterbalance high kick!
-                    neck: [0.22, -0.45, 0],
-                    lShoulder: [0.45, 0, 0.50], // left arm counter-swings
+                    hipsY: 0.91,
+                    hips: [-0.24, 0.48, -0.15],
+                    spine: [-0.30, 0.30, 0.10],
+                    neck: [0.20, -0.40, 0],
+                    lShoulder: [0.45, 0, 0.50],
                     lElbow: -0.85,
-                    rShoulder: [-0.95, 0.25, -0.20], // right hand guards face
+                    rShoulder: [-0.95, 0.25, -0.20],
                     rElbow: -1.65,
-                    lHip: [-1.64, -0.15, 0.24], // left leg extended high!
-                    lKnee: 0.04, // knee snaps razor-straight!
+                    lHip: [-1.52, -0.12, 0.20],
+                    lKnee: 0.04,
                     rHip: [0.24, 0, -0.08],
                     rKnee: 0.18
                 };
@@ -1156,8 +1523,11 @@ class Stickman {
                 break;
             }
 
+            // -----------------------------------------------------------------
+            // RK: Right High Crescent Cutter (High)
+            // -----------------------------------------------------------------
+            case 'RK':
             case 'KICK_2': {
-                // 2. Right Heavy Thrust/Roundhouse Kick (Kaki Kanan)
                 const chamber = {
                     hipsY: 0.90,
                     hips: [-0.12, 0.35, 0],
@@ -1167,23 +1537,23 @@ class Stickman {
                     lElbow: -1.65,
                     rShoulder: [-0.60, 0.2, -0.35],
                     rElbow: -1.55,
-                    lHip: [0.08, 0, 0], // left foot steps down as support pivot!
+                    lHip: [0.08, 0, 0],
                     lKnee: 0.25,
-                    rHip: [-1.52, -0.25, -0.35], // right knee chambers high!
+                    rHip: [-1.52, -0.25, -0.35],
                     rKnee: 1.68
                 };
                 const strike = {
                     hipsY: 0.93,
-                    hips: [-0.32, -0.65, 0.20], // full opposite hip whip!
-                    spine: [-0.38, -0.45, -0.15], // dramatic martial arts lean-back!
+                    hips: [-0.32, -0.65, 0.20],
+                    spine: [-0.38, -0.45, -0.15],
                     neck: [0.25, 0.50, 0],
-                    lShoulder: [-0.95, -0.25, 0.20], // left hand guards chin
+                    lShoulder: [-0.95, -0.25, 0.20],
                     lElbow: -1.65,
-                    rShoulder: [0.55, 0, -0.50], // right arm counter-swings
+                    rShoulder: [0.55, 0, -0.50],
                     rElbow: -0.75,
                     lHip: [0.28, 0, 0.08],
                     lKnee: 0.18,
-                    rHip: [-1.70, 0.18, -0.24], // right leg snaps razor-straight at head/chest height!
+                    rHip: [-1.72, 0.18, -0.24],
                     rKnee: 0.04
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
@@ -1194,34 +1564,77 @@ class Stickman {
                 break;
             }
 
+            // -----------------------------------------------------------------
+            // DOWN_LK: Dragon Hell Sweep (Low Shin Kick)
+            // -----------------------------------------------------------------
+            case 'DOWN_LK': {
+                const chamber = {
+                    hipsY: 0.58,
+                    hips: [0.25, -0.35, 0],
+                    spine: [0.45, 0.35, 0],
+                    neck: [-0.25, 0, 0],
+                    lShoulder: [-0.7, 0.2, 0.3],
+                    lElbow: -1.6,
+                    rShoulder: [-0.7, -0.2, -0.3],
+                    rElbow: -1.6,
+                    lHip: [-0.95, 0, 0.15],
+                    lKnee: 1.55,
+                    rHip: [0.25, 0, -0.15],
+                    rKnee: 1.25
+                };
+                const strike = {
+                    hipsY: 0.52,
+                    hips: [0.15, 0.75, 0],
+                    spine: [0.40, -0.60, 0],
+                    neck: [-0.20, 0.40, 0],
+                    lShoulder: [0.35, 0, 0.45],
+                    lElbow: -0.9,
+                    rShoulder: [-0.85, 0.2, -0.2],
+                    rElbow: -1.6,
+                    lHip: [-1.65, -0.15, 0.25],
+                    lKnee: 0.04,
+                    rHip: [0.45, 0, -0.15],
+                    rKnee: 1.45
+                };
+                this.applyThreePhaseStrike(p, chamber, strike);
+                if (this.attackPhase === 1 && this.trailTimer >= 0.020) {
+                    this.trailTimer = 0;
+                    this.vfx.spawnStrikeTrail(this.getLeftFootWorldPos(), 0x38bdf8, 1.8);
+                }
+                break;
+            }
+
+            // -----------------------------------------------------------------
+            // 3_3_4 FINISHER: 360 Tornado Jump Kick (Mid)
+            // -----------------------------------------------------------------
+            case '3_3_4_FINISHER':
             case 'KICK_3': {
-                // 3. 360° Jumping Tornado Spin Kick Finisher! (Tendangan Berputar)
                 const chamber = {
                     hipsY: 1.05,
-                    hips: [-0.15, Math.PI * 0.85, 0], // mid-spin windup!
+                    hips: [-0.15, Math.PI * 0.85, 0],
                     spine: [-0.15, 0.25, 0],
                     neck: [0.10, 0, 0],
                     lShoulder: [-0.85, 0.3, 0.3],
                     lElbow: -1.65,
                     rShoulder: [-0.85, -0.3, -0.3],
                     rElbow: -1.65,
-                    lHip: [-1.15, 0, 0.18], // left knee tucked in air!
+                    lHip: [-1.15, 0, 0.18],
                     lKnee: 1.55,
-                    rHip: [-1.35, 0, -0.28], // right leg chambered mid-spin!
+                    rHip: [-1.35, 0, -0.28],
                     rKnee: 1.60
                 };
                 const strike = {
                     hipsY: 1.12,
-                    hips: [-0.36, Math.PI * 2.0 - 0.55, 0.22], // completes full 360° tornado rotation!
+                    hips: [-0.36, Math.PI * 2.0 - 0.55, 0.22],
                     spine: [-0.36, -0.45, -0.15],
                     neck: [0.22, 0.45, 0],
                     lShoulder: [-0.95, -0.2, 0.45],
                     lElbow: -1.35,
                     rShoulder: [0.65, 0, -0.58],
                     rElbow: -0.55,
-                    lHip: [-0.80, 0, 0.20], // left leg tucked in air
+                    lHip: [-0.80, 0, 0.20],
                     lKnee: 1.48,
-                    rHip: [-1.76, 0.18, -0.30], // right leg whips out 100% straight!
+                    rHip: [-1.76, 0.18, -0.30],
                     rKnee: 0.02
                 };
                 this.applyThreePhaseStrike(p, chamber, strike);
@@ -1234,6 +1647,9 @@ class Stickman {
                 break;
             }
 
+            // -----------------------------------------------------------------
+            // AIR_KICK: Flying Side Kick
+            // -----------------------------------------------------------------
             case 'AIR_KICK': {
                 const chamber = {
                     hipsY: 0.95,
@@ -1258,7 +1674,7 @@ class Stickman {
                     lElbow: -0.8,
                     rShoulder: [-0.9, 0, -0.3],
                     rElbow: -1.5,
-                    lHip: [-1.45, 0, 0.1], // flying side kick extension!
+                    lHip: [-1.45, 0, 0.1],
                     lKnee: 0.04,
                     rHip: [-0.55, 0, -0.1],
                     rKnee: 1.45
@@ -1271,6 +1687,121 @@ class Stickman {
                 break;
             }
 
+            // -----------------------------------------------------------------
+            // THROW_ATTEMPT: Reaches hands forward to grab
+            // -----------------------------------------------------------------
+            case 'THROW_ATTEMPT': {
+                const reachPose = {
+                    hipsY: 0.85,
+                    hips: [0, 0.1, 0],
+                    spine: [0.25, 0, 0],
+                    neck: [-0.15, 0, 0],
+                    lShoulder: [-1.45, 0.2, 0.1],
+                    lElbow: -0.35,
+                    rShoulder: [-1.45, -0.2, -0.1],
+                    rElbow: -0.35,
+                    lHip: [-0.55, 0, 0.08],
+                    lKnee: 0.75,
+                    rHip: [0.40, 0, -0.08],
+                    rKnee: 0.35
+                };
+                this.applyBlendedPose(this.GUARD_POSE, reachPose, Math.sin(p * Math.PI));
+                break;
+            }
+
+            // -----------------------------------------------------------------
+            // THROW_SLAM: Collar Grab -> Hoist Overhead -> Mat Slam!
+            // -----------------------------------------------------------------
+            case 'THROW_SLAM': {
+                const victim = this.throwVictim;
+
+                if (p < 0.25) {
+                    // Grab & draw close
+                    const grabPose = {
+                        hipsY: 0.80,
+                        hips: [0, 0.15, 0],
+                        spine: [0.20, 0, 0],
+                        neck: [-0.15, 0, 0],
+                        lShoulder: [-1.35, 0.25, 0.15],
+                        lElbow: -0.65,
+                        rShoulder: [-1.35, -0.25, -0.15],
+                        rElbow: -0.65,
+                        lHip: [-0.55, 0, 0.08],
+                        lKnee: 0.85,
+                        rHip: [0.45, 0, -0.08],
+                        rKnee: 0.40
+                    };
+                    this.applyBlendedPose(this.GUARD_POSE, grabPose, p / 0.25);
+
+                    if (victim) {
+                        victim.position.x = this.position.x + this.facing * 0.65;
+                        victim.position.y = 0;
+                        victim.setFacing(-this.facing);
+                    }
+                } else if (p < 0.52) {
+                    // Hoist overhead with hip pivot!
+                    const lift = (p - 0.25) / 0.27;
+                    const hoistPose = {
+                        hipsY: 0.95,
+                        hips: [0, -0.45, 0],
+                        spine: [-0.35, -0.30, 0],
+                        neck: [0.25, 0.20, 0],
+                        lShoulder: [-2.1, 0.35, 0.1],
+                        lElbow: -0.85,
+                        rShoulder: [-2.1, -0.35, -0.1],
+                        rElbow: -0.85,
+                        lHip: [-0.25, 0, 0.08],
+                        lKnee: 0.35,
+                        rHip: [0.15, 0, -0.08],
+                        rKnee: 0.25
+                    };
+                    this.applyBlendedPose(this.GUARD_POSE, hoistPose, lift);
+
+                    if (victim) {
+                        victim.position.x = this.position.x + this.facing * (0.65 - lift * 1.6);
+                        victim.position.y = Math.sin(lift * Math.PI) * 1.65;
+                        victim.root.rotation.z = -this.facing * lift * Math.PI * 0.95;
+                    }
+                } else if (!this.hitRegistered) {
+                    // SLAM IMPACT!
+                    this.hitRegistered = true;
+                    if (victim) {
+                        victim.position.x = this.position.x - this.facing * 1.25;
+                        victim.position.y = 0;
+                        victim.root.rotation.z = 0;
+                        window.soundEngine.playThrowSlam();
+                        this.vfx.spawnShockwave(victim.position, 0x00f0ff, 3.2);
+                        this.vfx.spawnGroundDust(victim.position, 14);
+                        this.vfx.triggerShake(0.55);
+                        victim.takeDamage(24, -this.facing * 2.5, 0, true, this, 'THROW');
+                        victim.animState = 'KNOCKDOWN';
+                        victim.animTime = 0;
+                    }
+                } else {
+                    // Recovery back to stance
+                    const f = (p - 0.52) / 0.48;
+                    const recoveryPose = {
+                        hipsY: 0.86,
+                        hips: [0, -0.15, 0],
+                        spine: [0.15, 0, 0],
+                        neck: [-0.10, 0, 0],
+                        lShoulder: [-0.85, 0.2, 0.2],
+                        lElbow: -1.45,
+                        rShoulder: [-0.85, -0.2, -0.2],
+                        rElbow: -1.45,
+                        lHip: [-0.4, 0, 0.08],
+                        lKnee: 0.6,
+                        rHip: [0.3, 0, -0.08],
+                        rKnee: 0.4
+                    };
+                    this.applyBlendedPose(recoveryPose, this.GUARD_POSE, f);
+                }
+                break;
+            }
+
+            // -----------------------------------------------------------------
+            // SPECIAL: Ki Blast (Heat Smash)
+            // -----------------------------------------------------------------
             case 'SPECIAL': {
                 if (p < 0.45) {
                     const chargePose = {
@@ -1325,6 +1856,7 @@ class Stickman {
         if (p >= 1.0) {
             this.animState = this.isGrounded ? 'IDLE' : 'JUMP';
             this.attackType = null;
+            this.throwVictim = null;
         }
     }
 }

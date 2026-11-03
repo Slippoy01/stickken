@@ -159,28 +159,54 @@ class FighterAI {
             return;
         }
 
-        // 4. CLOSE RANGE (dist < 2.0 units) - COMBAT ENGAGEMENT!
+        // 4. CLOSE RANGE (dist < 2.0 units) - TEKKEN COMBAT ENGAGEMENT!
         if (dist < 2.0) {
             this.currentAction = 'IDLE';
             const attackRoll = Math.random();
 
             if (attackRoll < this.aggression) {
                 this.fighter.setBlock(false);
+                this.fighter.setCrouch(false);
 
-                if (Math.random() < this.comboTendency) {
-                    const comboType = Math.floor(Math.random() * 3);
-                    if (comboType === 0) {
-                        this.fighter.triggerAttack('PUNCH_1');
-                        this.comboQueue = ['PUNCH_2', 'PUNCH_3'];
-                    } else if (comboType === 1) {
-                        this.fighter.triggerAttack('KICK_1');
-                        this.comboQueue = ['KICK_2', 'KICK_3'];
+                // A. Anti-Turtle: If target is in standing guard, use Low Hell Sweep or Throw!
+                if (this.target.isBlocking && Math.random() < 0.65) {
+                    if (Math.random() < 0.5) {
+                        this.fighter.triggerAttack('DOWN_LK');
+                        this.comboQueue = ['3_3_4_FINISHER'];
                     } else {
-                        this.fighter.triggerAttack('PUNCH_1');
-                        this.comboQueue = ['PUNCH_2', 'KICK_3'];
+                        this.fighter.requestTekkenCommand('THROW', this.target);
+                    }
+                    return;
+                }
+
+                // B. Anti-Crouch: If target is ducking, crush them with Mid Uppercut!
+                if ((this.target.animState === 'CROUCH' || this.target.animState === 'CROUCH_BLOCK') && Math.random() < 0.70) {
+                    this.fighter.triggerAttack('UPPERCUT');
+                    return;
+                }
+
+                // C. Tekken Combo Strings
+                if (Math.random() < this.comboTendency) {
+                    const comboType = Math.floor(Math.random() * 4);
+                    if (comboType === 0) {
+                        // 1-1-2 Flash Demon String!
+                        this.fighter.triggerAttack('LP');
+                        this.comboQueue = ['LP_2', '1_1_2_FINISHER'];
+                    } else if (comboType === 1) {
+                        // Twin Dragon Crescent (LP -> RP -> RK)
+                        this.fighter.triggerAttack('LP');
+                        this.comboQueue = ['RP', 'RK'];
+                    } else if (comboType === 2) {
+                        // Tsunami Spin (LK -> DOWN_LK -> 3_3_4_FINISHER)
+                        this.fighter.triggerAttack('LK');
+                        this.comboQueue = ['DOWN_LK', '3_3_4_FINISHER'];
+                    } else {
+                        // Demon Axle (LK -> RK)
+                        this.fighter.triggerAttack('LK');
+                        this.comboQueue = ['RK'];
                     }
                 } else {
-                    const attacks = ['PUNCH_1', 'PUNCH_2', 'KICK_1', 'KICK_2'];
+                    const attacks = ['LP', 'RP', 'LK', 'RK', 'DOWN_LK'];
                     const picked = attacks[Math.floor(Math.random() * attacks.length)];
                     this.fighter.triggerAttack(picked);
                 }
